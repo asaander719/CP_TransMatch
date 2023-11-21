@@ -10,8 +10,8 @@ from torchvision import transforms
 import os
 from datetime import datetime
 import torchvision.models as models
-from kg_utils import *
-from dataloader import *
+from util.kg_utils import *
+from trainer.dataloader import *
 import scipy.sparse as sp
 
 def load_csv_data(train_data_path):
@@ -241,7 +241,7 @@ def prepare_wide_evaluate(test_data, neg_num, item_cates, cate_items):
     
 class Dataset():
     def __init__(self, conf):
-        dataconf = yaml.safe_load(open("./data_config.yaml"))
+        dataconf = yaml.safe_load(open("./config/data_config.yaml"))
         dataconf["dataset"] = conf["dataset"]
         if conf["dataset"] == "iqon":
             dataconf["new_datapath"] = dataconf["root_datapath"] + "iqon/"

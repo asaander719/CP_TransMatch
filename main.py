@@ -11,9 +11,9 @@ import shutil
 import os
 import yaml
 
-from utility import Dataset
-from TransMatch import TransMatch
-from eval_utils import *
+from data.utility import Dataset
+from trainer.TransMatch import TransMatch
+from util.eval_utils import *
 
     
 def evaluating(model, testData, device, conf, topks=[1]):
@@ -48,6 +48,7 @@ def Train_Eval(conf):
     if conf["model"] == "TransMatch":
         model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
+    early_stopping = EarlyStopping(patience=conf["patience"], verbose=True)
 
     optimizer = Adam([{'params': model.parameters(),'lr': conf["lr"], "weight_decay": conf["wd"]}])
     performance_files, result_path, model_path = get_save_file(conf, dataset.test_setting_list)
@@ -91,6 +92,11 @@ def Train_Eval(conf):
                     output_f = open(performance_files[test_setting], "a")
                     output_f.write(curr_time + "Epoch %d"%epoch + result_str + "\n")
                     output_f.close()
+
+                    early_stopping(auc)
+                    if early_stopping.early_stop:
+                        print("Early stopping")
+                        break 
                 else: # topk evaluation
                     metrics, preds = evaluating(model, test_loader, conf["device"], conf, conf["topk"])
                     curr_time = "%s "%datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -117,7 +123,11 @@ def Train_Eval(conf):
                     output_f.write(curr_time + "Epoch %d"%epoch + result_str + "\n")
                     output_f.close()
 
-                
+                    early_stopping(hit)
+                    if early_stopping.early_stop:
+                        print("Early stopping")
+                        break 
+                          
 def get_save_file(conf, settings):
     if conf["model"] == "TransMatch":      
         f_name = "TransMatch_"+conf["score_type"]
@@ -159,7 +169,7 @@ def get_cmd():
 
 if __name__ == "__main__": 
     paras = get_cmd().__dict__
-    conf = yaml.safe_load(open("./train_model_config.yaml"))
+    conf = yaml.safe_load(open("./config/train_model_config.yaml"))
     for k in paras:
         conf[k] = paras[k]  
     conf["device"] = torch.device("cuda:%s"%conf["gpu"] if torch.cuda.is_available() else "cpu")

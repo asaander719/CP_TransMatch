@@ -9,7 +9,8 @@ topk: 10
 hidden_dim: 32
 wide_evaluate: 0
 visual_feature_dim: 2048
-root_path: /mnt/juanjuan/cafidata/CP_TransMatch
+patience: 10
+root_path: /home/asaliao/CP_TransMatch/CP_TransMatch
 
 model_path: /model/
 result_path: /results/
