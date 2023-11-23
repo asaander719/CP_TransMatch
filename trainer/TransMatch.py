@@ -119,7 +119,9 @@ class TransMatch(Module):
         self.userEmb = F.normalize(torch.normal(mean=torch.zeros(self.user_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemB = torch.zeros([self.item_num + 1, 1])
-        
+
+        self.T = nn.Parameter(torch.zeros(self.hidden_dim))
+        # experiments shows that T (TransRec) dosen't helpful 
         
         self.u_embeddings_l = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
         self.i_bias_l = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
@@ -144,7 +146,9 @@ class TransMatch(Module):
         # self.margin = nn.Parameter(torch.tensor(1e-10)) 
         self.margin = 1e-10
 
-        
+        self.use_pretrain = conf["use_pretrain"]
+        self.pretrain_layer_num = 3 #["pretrain_layer_num"]
+
         if self.use_context:
             # define aggregators for each layer
             self.agg_param = conf["agg_param"]
@@ -224,10 +228,15 @@ class TransMatch(Module):
             entity_vectors = [self.visual_nn_comp(entity_features[entity_list[0]])]
         else:
             entity_vectors = [entity_features(entity_list[0])]
-        edge_vectors = [relation_features(edge_list[0])] # bs, candi_num, emb_dim
+        
+        edge_emb = relation_features(edge_list[0])
+        # T = self.T.expand_as(edge_emb)  
+        # edge_emb = edge_emb + T 
+        edge_vectors = [edge_emb] # bs, candi_num, emb_dim
+
         for edges in edge_list[1:]: # len(edge_list) = self.context_hops+1, len(entity_list) = self.context_hops
             relations = torch.index_select(self.edge2relation, 0, edges.view(-1)).view(list(edges.shape)) #         
-            edge_vectors.append(relation_features(relations))
+            edge_vectors.append(relation_features(relations)) # edge represent the implict interaction of user and entity, not a real vector
             
         for entities in entity_list[1:]:
             if visual:
@@ -266,7 +275,12 @@ class TransMatch(Module):
             entity_vectors = [self.visual_nn_comp(entity_features[entity_list[0]])]
         else:
             entity_vectors = [entity_features(entity_list[0])]
-        edge_vectors = [relation_features(edge_list[0])] # bs, candi_num, emb_dim
+
+        edge_emb = relation_features(edge_list[0])
+        # T = self.T.expand_as(edge_emb)  
+        # edge_emb = edge_emb + T 
+        edge_vectors = [edge_emb] 
+        
         for edges in edge_list[1:]: # len(edge_list) = self.context_hops+1, len(entity_list) = self.context_hops
             relations = torch.index_select(self.edge2relation, 0, edges.view(-1)).view(list(edges.shape)) #    
             edge_vectors.append(relation_features(relations)) # initial state: edge vectors are pure relation features
@@ -308,13 +322,18 @@ class TransMatch(Module):
     
     def get_path_rep(self, paths, path_mask, rel_rep):
         # paths: bs, path_num, path_len
+        path_emb = self.u_embeddings_l(paths)
+        # T = self.T.expand_as(path_emb)  
+        # path_emb = path_emb + T 
+
         if self.path_agg == "mean":
-            path_rep = torch.mean(self.u_embeddings_l(paths) * path_mask.unsqueeze(-1), (-2, -3)) 
+
+            path_rep = torch.mean(path_emb * path_mask.unsqueeze(-1), (-2, -3)) 
         elif self.path_agg == "sum":
-            path_rep = torch.sum(self.u_embeddings_l(paths) * path_mask.unsqueeze(-1), (-2, -3)) / torch.clamp(torch.sum(path_mask, (-1, -2)), min=1).unsqueeze(-1)
+            path_rep = torch.sum(path_emb * path_mask.unsqueeze(-1), (-2, -3)) / torch.clamp(torch.sum(path_mask, (-1, -2)), min=1).unsqueeze(-1)
         elif self.path_agg == "att":
             # rel_rep: bs, 1， emb_size (train); bs, 2, emb_size (inference)
-            path_rep = torch.sum(self.u_embeddings_l(paths) * path_mask.unsqueeze(-1), dim=-2) / torch.clamp(torch.sum(path_mask, dim=-1), min=1).unsqueeze(-1) # bs, path_num, em_dim
+            path_rep = torch.sum(path_emb * path_mask.unsqueeze(-1), dim=-2) / torch.clamp(torch.sum(path_mask, dim=-1), min=1).unsqueeze(-1) # bs, path_num, em_dim
             path_num = paths.size(-2)
             if len(path_rep.size()) == 3:
                 rel_path = torch.exp(torch.matmul(rel_rep, path_rep.permute(0,2,1))).squeeze(-2) #bs, path_num
@@ -331,6 +350,10 @@ class TransMatch(Module):
         Js = batch[2] 
         Ks = batch[3]
         
+        # if self.use_pretrain:
+            
+
+
         if self.use_context:
             self.entity_pairs_pos = torch.cat([Is.unsqueeze(1), Js.unsqueeze(1)], dim=-1)
             self.entity_pairs_neg = torch.cat([Is.unsqueeze(1), Ks.unsqueeze(1)], dim=-1) # bs, 2
@@ -359,6 +382,9 @@ class TransMatch(Module):
             
         else:
             U_latent = self.u_embeddings_l(Us)
+            # T = self.T.expand_as(U_latent)  # [B H]
+            # U_latent = U_latent + T 
+            
             I_latent = self.i_embeddings_i(Is)
             J_latent = self.i_embeddings_i(Js)
             K_latent = self.i_embeddings_i(Ks)
@@ -402,6 +428,9 @@ class TransMatch(Module):
     
         J_bias_v = self.i_bias_v(Js)
         K_bias_v = self.i_bias_v(Ks)
+
+        # if self.use_pretrain:
+
         if self.use_context:
             edge_pos_rep_v, entity_pos_rep_v = self._aggregate_neighbors_train(edge_list_pos, entity_list_pos, mask_list_pos, self.u_embeddings_v, self.visual_features, True) 
             edge_neg_rep_v, entity_neg_rep_v = self._aggregate_neighbors_train(edge_list_neg, entity_list_neg, mask_list_neg, self.u_embeddings_v, self.visual_features, True)
@@ -428,8 +457,8 @@ class TransMatch(Module):
             
         R_j += R_j_v
         R_k += R_k_v
-        # loss = bpr_loss(R_j, R_k)
-        loss = -torch.log(self.margin + torch.sigmoid(R_j - R_k)).mean()
+        loss = bpr_loss(R_j, R_k)
+        # loss = -torch.log(self.margin + torch.sigmoid(R_j - R_k)).mean()
         # 只有当R_j比R_k的score至少大出margin值时，loss才会更小,以防止negative sample和positive sample过于close
         # but only useful when those two are close, not effective if most of samples are not close
 
@@ -463,6 +492,8 @@ class TransMatch(Module):
         Us = Us.unsqueeze(1).expand(-1, j_num) #bs, j_num
         Is = Is.unsqueeze(1).expand(-1, j_num)
         J_bias_l = self.i_bias_l(J_list)
+
+        # if self.use_pretrain:
         
         if self.use_context:
             self.entity_pairs = torch.cat([Is.unsqueeze(-1), J_list.unsqueeze(-1)], dim=-1) # bs, j_num, 2
@@ -473,6 +504,9 @@ class TransMatch(Module):
             Js_latent_ii = entity_rep[:,:,1,:]
         else:
             U_latent = self.u_embeddings_l(Us) 
+            # T = self.T.expand_as(U_latent)  # [B H]
+            # U_latent = U_latent + T 
+
             I_latent_ii = self.i_embeddings_i(Is)
             Js_latent_ii = self.i_embeddings_i(J_list) 
             if self.score_type == "mlp":
@@ -505,6 +539,9 @@ class TransMatch(Module):
             scores += self.p_scores
  
         J_bias_v = self.i_bias_v(J_list)
+
+        # if self.use_pretrain:
+
         if self.use_context:
             edge_rep_v, entity_rep_v = self._aggregate_neighbors_test(edge_list, entity_list, mask_list, self.u_embeddings_v, self.visual_features, True)
             U_visual = edge_rep_v.squeeze(-2)
