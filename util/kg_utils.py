@@ -15,8 +15,8 @@ def build_kg(train_data):
         relation_id, head_id, tail_id, _ = triplet
         entity2edge_set[head_id].add(edge_idx)
         entity2edge_set[tail_id].add(edge_idx)
-        edge2entities.append([head_id, tail_id])
-        edge2relation.append(relation_id)
+        edge2entities.append([head_id, tail_id])             #[[1, 2], [3, 4], [5, 6]]
+        edge2relation.append(relation_id)                    # [1, 2, 3, 4]
         if relation_id not in relation2entity_set:
             relation2entity_set[relation_id] = []
         relation2entity_set[relation_id].append(head_id)
@@ -28,7 +28,7 @@ def build_kg(train_data):
 
 
     
-def shuffle_gragh(entity2edges, entity2edge_set, neighbor_samples):
+def shuffle_gragh(entity2edges, entity2edge_set, neighbor_samples): #To sample edges for each entity
     curr_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("%s shuffle kg ..."%curr_time)
     for i in range(len(entity2edge_set)):

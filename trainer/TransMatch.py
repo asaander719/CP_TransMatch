@@ -141,6 +141,9 @@ class TransMatch(Module):
         self.i_bias_v = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
         self.u_embeddings_v = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
 
+        # self.margin = nn.Parameter(torch.tensor(1e-10)) 
+        self.margin = 1e-10
+
         
         if self.use_context:
             # define aggregators for each layer
@@ -290,7 +293,16 @@ class TransMatch(Module):
 
     
     def transE_predict(self, u_rep, i_rep, j_rep, j_bias):
+        '''
+            u_rep: The embedding representation of a user,
+            i_rep: The embedding representation of positive bottom.
+            j_rep: The embedding representation of a negative bottom.
+            j_bias: A bias term associated with the negative sample j_rep. 
+                    Subtracted from sum, to adjust the score based on some intrinsic property of the negative sample.
+        '''
         pred = j_bias - torch.sum(torch.pow((u_rep + i_rep - j_rep), 2), -1, keepdim=True)
+        # computes the element-wise square of the difference, output a single score for each triple.
+        # experiment shows that j_bias is quite effective, and ||Mrh+r-Mrt|| is effective than h*r*t (DistMult).
         return pred.squeeze(-1)
     
     
@@ -416,7 +428,10 @@ class TransMatch(Module):
             
         R_j += R_j_v
         R_k += R_k_v
-        loss = bpr_loss(R_j, R_k)
+        # loss = bpr_loss(R_j, R_k)
+        loss = -torch.log(self.margin + torch.sigmoid(R_j - R_k)).mean()
+        # 只有当R_j比R_k的score至少大出margin值时，loss才会更小,以防止negative sample和positive sample过于close
+        # but only useful when those two are close, not effective if most of samples are not close
 
         return loss
     

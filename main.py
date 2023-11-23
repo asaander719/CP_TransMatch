@@ -66,6 +66,7 @@ def Train_Eval(conf):
             loss = model.forward(aBatch)  
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             loss_scalar += loss.detach().cpu()
         curr_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -92,11 +93,7 @@ def Train_Eval(conf):
                     output_f = open(performance_files[test_setting], "a")
                     output_f.write(curr_time + "Epoch %d"%epoch + result_str + "\n")
                     output_f.close()
-
-                    early_stopping(auc)
-                    if early_stopping.early_stop:
-                        print("Early stopping")
-                        break 
+       
                 else: # topk evaluation
                     metrics, preds = evaluating(model, test_loader, conf["device"], conf, conf["topk"])
                     curr_time = "%s "%datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -123,10 +120,12 @@ def Train_Eval(conf):
                     output_f.write(curr_time + "Epoch %d"%epoch + result_str + "\n")
                     output_f.close()
 
-                    early_stopping(hit)
-                    if early_stopping.early_stop:
-                        print("Early stopping")
-                        break 
+        early_stopping(auc)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break 
+        print(model.margin)
+        
                           
 def get_save_file(conf, settings):
     if conf["model"] == "TransMatch":      
