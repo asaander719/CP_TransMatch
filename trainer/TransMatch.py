@@ -7,13 +7,21 @@ from torch.nn import functional as F
 import pdb
 from abc import abstractmethod
 import numpy as np
-
+from pretrain.LightGCN import LightGCN, SelfAttention
+import pandas as pd
+from scipy.sparse import csr_matrix
 
 def bpr_loss(pos_score, neg_score):
     loss = - F.logsigmoid(pos_score - neg_score)
     loss = torch.mean(loss)
     
     return loss
+
+def find_top_k_similar_users(embs, k):
+    user_embeddings = embs.weight
+    similarity_matrix = torch.matmul(user_embeddings, user_embeddings.t())
+    top_k_users = torch.topk(similarity_matrix, k=k+1, dim=1)[1][:, 1:] # 取Top-K，不包括自己
+    return top_k_users
 
 class Aggregator(nn.Module):
     def __init__(self, emb_dim, self_included, agg_param):
@@ -87,7 +95,48 @@ class MeanAggregator(Aggregator):
         else:
             self_vectors = torch.mean(neighbor_vectors, dim=-2)
         return self_vectors, neighbor_vectors 
-  
+
+
+def build_adj(train_data_path):
+    '''
+    如果分别构建user-bottom的adj矩阵会出现u-b pair出现多次的情况则累加, t-b同理,ID不是从0开始的连续整数需要重新映射这些ID
+    '''
+    train_df = pd.read_csv(train_data_path, header=None).astype('int')
+    train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+    num_users = train_df['user_idx'].nunique()
+    num_tops = train_df['top_idx'].nunique()
+    num_bottoms = train_df['pos_bottom_idx'].nunique()
+    train_df['user_id_encoded'], _ = pd.factorize(train_df['user_idx'])
+    train_df['top_id_encoded'], _ = pd.factorize(train_df['top_idx'])
+    train_df['bottom_id_encoded'], _ = pd.factorize(train_df['pos_bottom_idx'])
+
+    ub_group = train_df.groupby(['user_id_encoded', 'bottom_id_encoded']).size().reset_index(name='counts')
+    tb_group = train_df.groupby(['top_id_encoded', 'bottom_id_encoded']).size().reset_index(name='counts')
+    # adj_UJ = csr_matrix((np.ones(len(train_df)), (train_df['user_idx'].values, train_df['pos_bottom_idx'].values)),
+    #                                     shape=(num_users, num_bottoms))
+    # adj_IJ = csr_matrix((np.ones(len(train_df)), (train_df['top_idx'].values, train_df['pos_bottom_idx'].values)),
+    #                                     shape=(num_tops, num_bottoms))
+    
+    adj_UJ = csr_matrix((ub_group['counts'].values, (ub_group['user_id_encoded'].values, ub_group['bottom_id_encoded'].values)),
+        shape=(num_users, num_bottoms))
+    adj_IJ = csr_matrix((tb_group['counts'].values, (tb_group['top_id_encoded'].values, tb_group['bottom_id_encoded'].values)),
+        shape=(num_tops, num_bottoms))
+
+    adj_UJ = to_torch_sparse_tensor(adj_UJ)
+    adj_IJ = to_torch_sparse_tensor(adj_IJ)
+
+    # print("adj_UJ.size=",adj_UJ.size()) #torch.Size([1769, 47640])
+    # print("adj_IJ.size=",adj_IJ.size()) #torch.Size([47633, 47640])
+    return adj_UJ, adj_IJ
+
+def to_torch_sparse_tensor(csr_matrix):
+    #"将scipy.sparse的CSR矩阵转换为PyTorch稀疏张量"
+    coo_matrix = csr_matrix.tocoo().astype(np.float32)
+    row = torch.LongTensor(coo_matrix.row)
+    col = torch.LongTensor(coo_matrix.col)
+    index = torch.stack([row, col])
+    value = torch.FloatTensor(coo_matrix.data)
+    return torch.sparse.FloatTensor(index, value, torch.Size(coo_matrix.shape))
     
 
 class TransMatch(Module):
@@ -107,6 +156,7 @@ class TransMatch(Module):
         if self.use_path:
             self.path_weight = conf["path_weight"]
             self.path_agg = conf["path_agg"]
+        self.use_selfatt = conf['use_selfatt']
 
         self.neighbor_params = neighbor_params
         self.entity2edges = torch.LongTensor(self.neighbor_params[0]).to(self.device)
@@ -119,13 +169,22 @@ class TransMatch(Module):
         self.userEmb = F.normalize(torch.normal(mean=torch.zeros(self.user_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemB = torch.zeros([self.item_num + 1, 1])
-
-        self.T = nn.Parameter(torch.zeros(self.hidden_dim))
-        # experiments shows that T (TransRec) dosen't helpful 
         
         self.u_embeddings_l = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
         self.i_bias_l = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
         self.i_embeddings_i = nn.Embedding.from_pretrained(self.itemEmb, freeze=False, padding_idx=self.item_num)
+
+        # self.T = nn.Parameter(torch.zeros(self.hidden_dim))
+        # experiments shows that T (TransRec) dosen't helpful 
+        
+        self.use_pretrain = conf["use_pretrain"]
+        self.pretrain_layer_num = conf['pretrain_layer_num']
+        if self.use_pretrain:
+            self.train_data_path = conf["root_path"] + "/data/iqon_s/train.csv"
+            self.adj_UJ, self.adj_IJ = build_adj(self.train_data_path)
+            self.LightGCN = LightGCN(self.u_embeddings_l, self.i_embeddings_i, self.pretrain_layer_num, 
+                self.adj_UJ, self.adj_IJ, self.device).to(self.device)
+            self.self_attention = SelfAttention(self.hidden_dim).to(self.device)
      
         self.visual_nn_comp = Sequential(
             Linear(conf["visual_feature_dim"], self.hidden_dim),
@@ -146,9 +205,6 @@ class TransMatch(Module):
         # self.margin = nn.Parameter(torch.tensor(1e-10)) 
         self.margin = 1e-10
 
-        self.use_pretrain = conf["use_pretrain"]
-        self.pretrain_layer_num = 3 #["pretrain_layer_num"]
-
         if self.use_context:
             # define aggregators for each layer
             self.agg_param = conf["agg_param"]
@@ -168,13 +224,11 @@ class TransMatch(Module):
                 self.scorer = nn.Linear(self.hidden_dim, 1)  
 
      
-    
     def _get_neighbor_aggregators(self):
         aggregators = []  # store all aggregators
         for i in range(self.context_hops):
             aggregators.append(self.neighbor_agg(emb_dim=self.hidden_dim, self_included=True, agg_param=self.agg_param))
-        return aggregators
-    
+        return aggregators   
 
     def _get_entity_neighbors_and_masks(self, relations, entity_pairs, train_edges=None):
         bs = relations.size(0)
@@ -349,10 +403,6 @@ class TransMatch(Module):
         Is = batch[1]
         Js = batch[2] 
         Ks = batch[3]
-        
-        # if self.use_pretrain:
-            
-
 
         if self.use_context:
             self.entity_pairs_pos = torch.cat([Is.unsqueeze(1), Js.unsqueeze(1)], dim=-1)
@@ -408,8 +458,43 @@ class TransMatch(Module):
             U_latent_pos = U_latent
             U_latent_neg = U_latent
             I_latent_pos = I_latent
-            I_latent_neg = I_latent
-         
+            I_latent_neg = I_latent       
+                
+        if self.use_pretrain:
+            user_emb_pos, i_emb_pos, j_emb = self.LightGCN.forward(Us, Is, Js)
+            user_emb_neg, i_emb_neg, k_emb = self.LightGCN.forward(Us, Is, Ks)
+
+            top_k_users = find_top_k_similar_users(self.u_embeddings_l, self.conf["top_k_u"])
+            top_k_items = find_top_k_similar_users(self.i_embeddings_i, self.conf["top_k_i"])
+            top_k_U_emb = self.u_embeddings_l(top_k_users[Us])
+            top_k_I_emb = self.i_embeddings_i(top_k_items[Is])
+            top_k_J_emb = self.i_embeddings_i(top_k_items[Js])
+            top_k_K_emb = self.i_embeddings_i(top_k_items[Ks])
+            if self.use_selfatt:
+                U_latent_pos = self.self_attention(user_emb_pos, top_k_U_emb)
+                U_latent_neg = self.self_attention(user_emb_neg, top_k_U_emb)
+                I_latent_pos = self.self_attention(i_emb_pos, top_k_I_emb)
+                I_latent_neg = self.self_attention(i_emb_neg, top_k_I_emb)
+                J_latent = self.self_attention(j_emb, top_k_J_emb)
+                K_latent = self.self_attention(k_emb, top_k_K_emb)
+
+            else:
+                U_latent_pos = user_emb_pos
+                U_latent_neg = user_emb_neg
+                I_latent_pos = i_emb_pos
+                I_latent_neg = i_emb_neg
+                J_latent = j_emb
+                K_latent = k_emb
+
+            if self.score_type == "mlp":
+                R_j += self.scorer(U_latent_pos).squeeze(-1)
+                R_k += self.scorer(U_latent_neg).squeeze(-1) #or apply classification loss
+            elif self.score_type == "transE":
+                J_bias_l = self.i_bias_l(Js)
+                K_bias_l = self.i_bias_l(Ks)
+                R_j += self.transE_predict(U_latent_pos.squeeze(-2), I_latent_pos, J_latent, J_bias_l)
+                R_k += self.transE_predict(U_latent_neg.squeeze(-2), I_latent_neg, K_latent, K_bias_l)  
+                        
         if self.use_path:
             pos_paths = batch[5]
             neg_paths = batch[6]
