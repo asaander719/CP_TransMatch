@@ -22,8 +22,8 @@ data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
 context: 1  #considering context-enhanced module if 1
 use_pretrain: 1
-top_k_u: 5
-top_k_i: 5
+top_k_u: 2
+top_k_i: 2
 path: 1  #considering path-enhanced module if 1
 use_selfatt: 1
 pretrain_layer_num: 3
@@ -36,3 +36,4 @@ max_path_len: 4  #maximum length of paths to consider
 path_num: 4  #number of considered qualified paths(randomly sample)
 path_weight: 1  #weight of path-based transition modeling
 path_agg: "mean"
+pretrain_mode: True

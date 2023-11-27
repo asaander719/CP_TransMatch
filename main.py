@@ -12,7 +12,7 @@ import os
 import yaml
 
 from data.utility import Dataset
-from trainer.TransMatch import TransMatch
+from trainer.TransMatch import TransMatch, BPR
 from util.eval_utils import *
 
     
@@ -37,7 +37,10 @@ def evaluating(model, testData, device, conf, topks=[1]):
         metrics[topk]["mrr"] = MRR
         metrics[topk]["ndcg"] = NDCG
     return metrics, preds
-
+    
+def continue_training(model_path):
+    model = torch.load(model_path)
+    print("Continuing training with existing model...")
 
 def Train_Eval(conf):
     dataset = Dataset(conf)
@@ -46,9 +49,19 @@ def Train_Eval(conf):
     conf["cate_num"] = len(dataset.cate_items)
     print("data prepared, %d users, %d items, %d train, %d test, %d validation data"%(len(dataset.user_map), len(dataset.item_map), len(dataset.traindata), len(dataset.testdata), len(dataset.valdata)))
     if conf["model"] == "TransMatch":
+        # if conf['pretrain_mode']:
+        #     pretrain_model_file = f"{conf['model']}-{'iqon_s'}-{'pretrained_model'}.pth.tar"
+        #     pretrain_model_path = "model/iqon_s/pretrained_model/" + pretrain_model_file 
+        #     if os.path.exists(pretrain_model_path):
+        #         model = torch.load(pretrain_model_path)
+        #         print("Continuing training with existing model...")
+        #     else:
+        #         model = BPR(conf, conf["user_num"], conf["item_num"], conf['hidden_dim'], conf['score_type'], dataset.visual_features.to(conf["device"]))
+        # else:    
+        #     model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
         model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
-    early_stopping = EarlyStopping(patience=conf["patience"], verbose=True)
+    early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
 
     optimizer = Adam([{'params': model.parameters(),'lr': conf["lr"], "weight_decay": conf["wd"]}])
     performance_files, result_path, model_path = get_save_file(conf, dataset.test_setting_list)

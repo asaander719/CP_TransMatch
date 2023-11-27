@@ -53,9 +53,10 @@ def get_metrics(grd, grd_cnt, pred, topk):
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
-    def __init__(self, patience, verbose=False, delta=0, trace_func=print):
+    def __init__(self, pretrain_mode, patience, verbose=False, delta=0, trace_func=print):
         """
         Args:
+            pretrain_mode (bool): Define the training mode, Default: True, pretrain_mode / if False, TransMatch training mode
             patience (int): How long to wait after last time validation loss improved.
                             Default: 8
             verbose (bool): If True, prints a message for each validation loss improvement. 
@@ -67,6 +68,7 @@ class EarlyStopping:
                             Default: print            
         """
         self.patience = patience
+        self.pretrain_mode = pretrain_mode
         self.verbose = verbose
         self.counter = 0
         self.best_score = None
@@ -84,7 +86,9 @@ class EarlyStopping:
             self.counter += 1
             self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
-                self.early_stop = True
+                self.pretrain_mode = False
+                if self.counter >= self.patience + self.patience:
+                    self.early_stop = True
         else:
             self.best_score = score
             self.counter = 0
