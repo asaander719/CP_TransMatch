@@ -2,30 +2,39 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class LightGCN(nn.Module):
-    def __init__(self, user_embedding, item_embedding, pretrain_layer_num, adj_UJ, adj_IJ, device):
+    def __init__(self, pretrain_layer_num, adj_UJ, adj_IJ, top_embs, pos_bottoms_embs, all_users_embs):
         super(LightGCN, self).__init__()
-        self.user_embedding = user_embedding
-        self.item_embedding = item_embedding
+        # self.device = device
+        # self.user_embedding = user_embedding#.to(self.device)
+        # self.item_embedding = item_embedding#.to(self.device)
         self.num_layers = pretrain_layer_num
-        self.device = device
-        self.adj_IJ = adj_IJ.to(self.device)
-        self.adj_UJ = adj_UJ.to(self.device)
-
-    def forward(self, Us, Is, Js):
-        user_emb = self.user_embedding(Us)
-        Is_emb = self.item_embedding(Is)
-        Js_emb = self.item_embedding(Js)
+        self.adj_IJ = adj_IJ#.to(self.device)
+        self.adj_UJ = adj_UJ#.to(self.device)
+        self.top_embs = top_embs#.to(self.device)
+        self.pos_bottoms_embs = pos_bottoms_embs#.to(self.device)
+        self.all_users_embs = all_users_embs
+        
+    def forward(self):#, Us, Is, Js, Ks):
+        # user_emb = self.user_embedding(Us)
+        # Is_emb = self.item_embedding(Is)
+        # Js_emb = self.item_embedding(Js)
+        # Ks_emb = self.item_embedding(Ks)
+        # print(self.adj_UJ.size(), self.pos_bottoms_embs.size(), self.adj_IJ.size(), self.top_embs.size())
         #使用完整的邻接矩阵，但只更新minibatch中的emb.
+        #torch.Size([1769, 47640]) torch.Size([47640, 32]) torch.Size([47633, 47640]) torch.Size([47633, 32])
         for _ in range(self.num_layers):
-            user_emb_temp = torch.sparse.mm(self.adj_UJ, self.item_embedding.weight)
-            item_emb_temp = torch.sparse.mm(self.adj_IJ.t(), self.user_embedding.weight)
+            user_emb_temp = torch.sparse.mm(self.adj_UJ, self.pos_bottoms_embs)  #user_num, hidden-dim
+            pos_bottoms_emb_temp = torch.sparse.mm(self.adj_UJ.t(), self.all_users_embs)
+            top_emb_temp = torch.sparse.mm(self.adj_IJ, self.pos_bottoms_embs)
+            pos_bottoms_emb_temp += torch.sparse.mm(self.adj_IJ.t(), self.top_embs)
 
-            final_user_emb = user_emb + user_emb_temp(Us)
-            final_Is_emb = Is_emb + item_emb_temp(Is)
-            final_Js_emb = Js_emb + item_emb_temp(Js)
+            # final_user_emb = user_emb.to(self.device) + user_emb_temp[torch.LongTensor(Us)]
+            # final_Is_emb = Is_emb.to(self.device) + top_emb_temp[torch.LongTensor(Is)]
+            # final_Js_emb = Js_emb.to(self.device) + pos_bottoms_emb_temp[torch.LongTensor(Js)]
 
-        return final_user_emb, final_Is_emb, final_Js_emb
+        return user_emb_temp, top_emb_temp, pos_bottoms_emb_temp
 
 
 class SelfAttention(nn.Module):
