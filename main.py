@@ -14,6 +14,8 @@ import yaml
 from data.utility import Dataset
 from trainer.TransMatch import TransMatch, BPR
 from util.eval_utils import *
+import pandas as pd
+from scipy.sparse import csr_matrix
 
     
 def evaluating(model, testData, device, conf, topks=[1]):
@@ -47,9 +49,10 @@ def Train_Eval(conf):
     conf["user_num"] = len(dataset.user_map)
     conf["item_num"] = len(dataset.item_map)
     conf["cate_num"] = len(dataset.cate_items)
+    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     print("data prepared, %d users, %d items, %d train, %d test, %d validation data"%(len(dataset.user_map), len(dataset.item_map), len(dataset.traindata), len(dataset.testdata), len(dataset.valdata)))
     if conf["model"] == "TransMatch":
-        # if conf['pretrain_mode']:
+        if conf['pretrain_mode']:
         #     pretrain_model_file = f"{conf['model']}-{'iqon_s'}-{'pretrained_model'}.pth.tar"
         #     pretrain_model_path = "model/iqon_s/pretrained_model/" + pretrain_model_file 
         #     if os.path.exists(pretrain_model_path):
@@ -57,9 +60,12 @@ def Train_Eval(conf):
         #         print("Continuing training with existing model...")
         #     else:
         #         model = BPR(conf, conf["user_num"], conf["item_num"], conf['hidden_dim'], conf['score_type'], dataset.visual_features.to(conf["device"]))
-        # else:    
-        #     model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
-        model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
+        # else:   
+            # train_data_path = conf["root_path"] + "/data/iqon_s/train.csv"
+            # adj_UJ, adj_IJ, all_top_ids, all_bottom_ids, all_users_ids, top_idx_to_encoded, bottom_idx_to_encoded = build_adj(train_data_path) 
+            model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))#, adj_UJ.to(conf["device"]), adj_IJ.to(conf["device"]), all_top_ids, all_bottom_ids, all_users_ids, top_idx_to_encoded, bottom_idx_to_encoded)
+        else:
+            model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
 
@@ -79,7 +85,7 @@ def Train_Eval(conf):
             loss = model.forward(aBatch)  
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             loss_scalar += loss.detach().cpu()
         curr_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -137,7 +143,7 @@ def Train_Eval(conf):
         if early_stopping.early_stop:
             print("Early stopping")
             break 
-        print(model.margin)
+        # print(model.margin)
         
                           
 def get_save_file(conf, settings):
