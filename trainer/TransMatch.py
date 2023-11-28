@@ -13,9 +13,6 @@ from scipy.sparse import csr_matrix
 
 def bpr_loss(pos_score, neg_score):
     loss = - F.logsigmoid(pos_score - neg_score).mean()
-    # # loss = torch.mean(loss)
-    # loss = torch.mean((- F.logsigmoid(pos_score - neg_score)).sum())
-    
     return loss
 
 class Aggregator(nn.Module):
