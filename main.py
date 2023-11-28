@@ -12,7 +12,8 @@ import os
 import yaml
 
 from data.utility import Dataset
-from trainer.TransMatch import TransMatch, BPR
+from trainer.TransMatch import TransMatch
+from trainer.BPR import BPR
 from util.eval_utils import *
 import pandas as pd
 from scipy.sparse import csr_matrix
@@ -143,7 +144,7 @@ def Train_Eval(conf):
         if early_stopping.early_stop:
             print("Early stopping")
             break 
-        # print(model.margin)
+       
         
                           
 def get_save_file(conf, settings):
