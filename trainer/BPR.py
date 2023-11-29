@@ -10,13 +10,15 @@ import numpy as np
 
 
 class BPR(Module):
-    def __init__(self, conf, user_num, item_num, hidden_dim, score_type, visual_features):
+    def __init__(self, conf, visual_features=None, item_cate=None):
         super(BPR, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.user_num = user_num
-        self.item_num = item_num
-        self.score_type = score_type
         self.visual_features = visual_features
+        self.hidden_dim = conf["hidden_dim"]
+        self.user_num = conf["user_num"]
+        self.item_num = conf["item_num"]
+        self.batch_size = conf["batch_size"]
+        self.device = conf["device"]
+        self.score_type = conf["score_type"]
 
         self.userEmb = F.normalize(torch.normal(mean=torch.zeros(self.user_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
@@ -27,8 +29,8 @@ class BPR(Module):
         self.i_embeddings_i = nn.Embedding.from_pretrained(self.itemEmb, freeze=False, padding_idx=self.item_num)
 
         if self.score_type == "mlp":
-                self.layer = nn.Linear(self.hidden_dim * 3, self.hidden_dim)
-                self.scorer = nn.Linear(self.hidden_dim, 1)   
+            self.layer = nn.Linear(self.hidden_dim * 3, self.hidden_dim)
+            self.scorer = nn.Linear(self.hidden_dim, 1)   
 
         self.visual_nn_comp = Sequential(
             Linear(conf["visual_feature_dim"], self.hidden_dim),
@@ -42,7 +44,6 @@ class BPR(Module):
             nn.Sigmoid())
         self.visual_nn_per[0].apply(lambda module: uniform_(module.weight.data,0,0.001))
         self.visual_nn_per[0].apply(lambda module: uniform_(module.bias.data,0,0.001))
-        self.visual_features = visual_features
         self.i_bias_v = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
         self.u_embeddings_v = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
 
@@ -50,7 +51,7 @@ class BPR(Module):
         # experiments shows that T (TransRec) dosen't helpful 
 
         # self.margin = nn.Parameter(torch.tensor(1e-10)) 
-        self.margin = 1e-10
+        # self.margin = 1e-10
 
     def transE_predict(self, u_rep, i_rep, j_rep, j_bias):
         '''
@@ -65,11 +66,11 @@ class BPR(Module):
         # experiment shows that j_bias is quite effective, and ||Mrh+r-Mrt|| is effective than h*r*t (DistMult).
         return pred.squeeze(-1)
 
-    def forward(self, batch):
-        Us = batch[0]
-        Is = batch[1]
-        Js = batch[2] 
-        Ks = batch[3] 
+    def forward(self, Us, Is, Js, Ks):
+        # Us = batch[0]
+        # Is = batch[1]
+        # Js = batch[2] 
+        # Ks = batch[3] 
 
         U_latent = self.u_embeddings_l(Us)
             # T = self.T.expand_as(U_latent)  # [B H]
@@ -112,18 +113,18 @@ class BPR(Module):
             
         R_j += R_j_v
         R_k += R_k_v
-        loss = bpr_loss(R_j, R_k)
+        # loss = bpr_loss(R_j, R_k)
         # loss = -torch.log(self.margin + torch.sigmoid(R_j - R_k)).mean()
         # 只有当R_j比R_k的score至少大出margin值时，loss才会更小,以防止negative sample和positive sample过于close
         # but only useful when those two are close, not effective if most of samples are not close
 
-        return loss
+        return R_j, R_k
 
-    def inference(self, batch):
-        Us = batch[0]
-        Is = batch[1]
-        Js = batch[2] 
-        Ks = batch[3]
+    def inference(self, Us, Is, Js, Ks):
+        # Us = batch[0]
+        # Is = batch[1]
+        # Js = batch[2] 
+        # Ks = batch[3]
         J_list = torch.cat([Js.unsqueeze(1), Ks], dim=-1)
         j_num = J_list.size(1)
         Us = Us.unsqueeze(1).expand(-1, j_num) #bs, j_num
@@ -161,9 +162,9 @@ class BPR(Module):
         scores += self.vis_scores
         return scores
 
-def bpr_loss(pos_score, neg_score):
-    loss = - F.logsigmoid(pos_score - neg_score).mean()
-    # # loss = torch.mean(loss)
-    # loss = torch.mean((- F.logsigmoid(pos_score - neg_score)).sum())
+# def bpr_loss(pos_score, neg_score):
+#     loss = - F.logsigmoid(pos_score - neg_score).mean()
+#     # # loss = torch.mean(loss)
+#     # loss = torch.mean((- F.logsigmoid(pos_score - neg_score)).sum())
     
-    return loss
+#     return loss

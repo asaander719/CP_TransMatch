@@ -493,12 +493,12 @@ class TransMatch(Module):
             elif self.score_type == "transE":
                 J_bias_l = self.i_bias_l(Js)
                 K_bias_l = self.i_bias_l(Ks)
-                U_latent_pos = F.normalize(U_latent_pos.squeeze(-2),dim=-1)
-                U_latent_neg = F.normalize(U_latent_neg.squeeze(-2),dim=-1)
-                I_latent_pos = F.normalize(I_latent_pos,dim=-1)
-                I_latent_neg = F.normalize(I_latent_neg,dim=-1)
-                J_latent = F.normalize(J_latent,dim=-1)
-                K_latent = F.normalize(K_latent,dim=-1)
+                U_latent_pos = F.normalize(U_latent_pos.squeeze(-2),dim=0)
+                U_latent_neg = F.normalize(U_latent_neg.squeeze(-2),dim=0)
+                I_latent_pos = F.normalize(I_latent_pos,dim=0)
+                I_latent_neg = F.normalize(I_latent_neg,dim=0)
+                J_latent = F.normalize(J_latent,dim=0)
+                K_latent = F.normalize(K_latent,dim=0)
                 R_j += self.transE_predict(U_latent_pos, I_latent_pos, J_latent, J_bias_l)
                 R_k += self.transE_predict(U_latent_neg, I_latent_neg, K_latent, K_bias_l)  
                         
@@ -643,13 +643,13 @@ class TransMatch(Module):
                 J_latent = self.aggregate_embeddings(pos_bottoms_emb_temp, topk_Js_idxs, J_latent)
                 K_latent = self.aggregate_embeddings(pos_bottoms_emb_temp, topk_Ks_idxs, K_latent)
             
+                U_latent = F.normalize(U_latent, dim=0)
+                I_latent = F.normalize(I_latent, dim=0)
+                J_latent = F.normalize(J_latent, dim=0)
+                K_latent = F.normalize(K_latent, dim=0)
+
                 U_latent = U_latent.unsqueeze(1).expand(-1, j_num, -1)
                 I_latent = I_latent.unsqueeze(1).expand(-1, j_num, -1)
-         
-                U_latent = F.normalize(U_latent, dim=-1)
-                I_latent = F.normalize(I_latent, dim=-1)
-                J_latent = F.normalize(J_latent, dim=-1)
-                K_latent = F.normalize(K_latent, dim=-1)
 
             Js_latent_ii = torch.stack((J_latent, K_latent), dim=1)
                
@@ -708,9 +708,6 @@ class TransMatch(Module):
             self.p_scores = self.transE_predict(path_rep, I_latent_ii, Js_latent_ii, J_bias_l)
             scores += self.p_scores
  
-        J_bias_v = self.i_bias_v(J_list)
-
-
         if self.use_context:
             edge_rep_v, entity_rep_v = self._aggregate_neighbors_test(edge_list, entity_list, mask_list, self.u_embeddings_v, self.visual_features, True)
             U_visual = edge_rep_v.squeeze(-2)
@@ -726,9 +723,8 @@ class TransMatch(Module):
         if self.score_type == "mlp":
             scores += self.scorer(edge_rep_v).squeeze(-1)
         elif self.score_type == "transE":
-            J_bias_l = self.i_bias_l(J_list)
+            J_bias_v = self.i_bias_v(J_list)
             self.vis_scores = self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v)
-
-        scores += self.vis_scores
+            scores += self.vis_scores
         return scores
    
