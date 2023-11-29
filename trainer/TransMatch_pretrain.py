@@ -121,6 +121,7 @@ class TransMatch(Module):
         self.batch_size = conf["batch_size"]
         self.device = conf["device"]
         self.score_type = conf["score_type"]
+        self.use_Nor = conf['use_Nor']
 
         self.neighbor_params = neighbor_params
         self.entity2edges = torch.LongTensor(self.neighbor_params[0]).to(self.device)
@@ -138,6 +139,7 @@ class TransMatch(Module):
         self.top_k_u = conf["top_k_u"]
         self.top_k_i = conf["top_k_i"]
         self.self_attention = SelfAttention(self.hidden_dim)
+        self.self_attention_v = SelfAttention(self.hidden_dim)
 
         self.pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
         self.pretrain_model_dir = "model/iqon_s/pretrained_model/"
@@ -159,7 +161,7 @@ class TransMatch(Module):
         else:
             self.use_context = True
             self.use_path = False
-
+        
         if self.use_context:
             self.context_hops = conf["context_hops"] 
             # define aggregators for each layer
@@ -336,6 +338,8 @@ class TransMatch(Module):
         Is = batch[1]
         Js = batch[2] 
         Ks = batch[3]
+        J_bias_v = self.bpr.i_bias_v(Js)
+        K_bias_v = self.bpr.i_bias_v(Ks)
 
         if self.pretrain_mode:
             R_j, R_k = self.bpr.forward(batch)
@@ -366,9 +370,6 @@ class TransMatch(Module):
                     K_bias_l = self.bpr.i_bias_l(Ks)
                     R_j = self.transE_predict(U_latent_pos.squeeze(-2), I_latent_pos, J_latent, J_bias_l)
                     R_k = self.transE_predict(U_latent_neg.squeeze(-2), I_latent_neg, K_latent, K_bias_l)
-
-                J_bias_v = self.bpr.i_bias_v(Js)
-                K_bias_v = self.bpr.i_bias_v(Ks)
                 
                 edge_pos_rep_v, entity_pos_rep_v = self._aggregate_neighbors_train(edge_list_pos, entity_list_pos, mask_list_pos, self.bpr.u_embeddings_v, self.visual_features, True) 
                 edge_neg_rep_v, entity_neg_rep_v = self._aggregate_neighbors_train(edge_list_neg, entity_list_neg, mask_list_neg, self.bpr.u_embeddings_v, self.visual_features, True)
@@ -386,7 +387,7 @@ class TransMatch(Module):
                 R_j, R_k = self.bpr.forward(batch)  
                 
             if self.use_pretrain:
-                U_latent = self.bpr.u_embeddings_l(Us)                 
+                U_latent = self.bpr.u_embeddings_l(Us) 
                 I_latent = self.bpr.i_embeddings_i(Is)
                 J_latent = self.bpr.i_embeddings_i(Js)
                 K_latent = self.bpr.i_embeddings_i(Ks)
@@ -396,34 +397,64 @@ class TransMatch(Module):
                 topk_Ks_idxs = self.find_topk_similar_users(K_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
             
                 if self.use_selfatt:
-                    U_latent_pos  = self.aggregate_item_embeddings(self.bpr.u_embeddings_l, topk_users_idxs, U_latent)  
-                    U_latent_neg = U_latent_pos    
-                    I_latent_pos = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Is_idxs, I_latent)
-                    I_latent_neg = I_latent_pos
+                    U_latent  = self.aggregate_item_embeddings(self.bpr.u_embeddings_l, topk_users_idxs, U_latent)     
+                    I_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Is_idxs, I_latent)
                     J_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Js_idxs, J_latent)
                     K_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Ks_idxs, K_latent)
-
-                    U_latent_pos = F.normalize(U_latent_pos.squeeze(-2),dim=0)
-                    U_latent_neg = F.normalize(U_latent_neg.squeeze(-2),dim=0)
-                    I_latent_pos = F.normalize(I_latent_pos,dim=0)
-                    I_latent_neg = F.normalize(I_latent_neg,dim=0)
-                    J_latent = F.normalize(J_latent,dim=0)
-                    K_latent = F.normalize(K_latent,dim=0)
+                    if self.use_Nor:
+                        U_latent = F.normalize(U_latent_pos,dim=0)
+                        I_latent = F.normalize(I_latent_neg,dim=0)
+                        J_latent = F.normalize(J_latent,dim=0)
+                        K_latent = F.normalize(K_latent,dim=0)
 
                 if self.score_type == "mlp":
-                    R_j += self.scorer(U_latent_pos).squeeze(-1)
-                    R_k += self.scorer(U_latent_neg).squeeze(-1) #or apply classification loss
+                    edge_pos_rep = torch.cat([U_latent, I_latent, J_latent], dim=-1)
+                    edge_neg_rep = torch.cat([U_latent, I_latent, K_latent], dim=-1)
+                    edge_pos_rep = self.layer(edge_pos_rep)  # [bs, -1, emb_dim]
+                    edge_pos_rep = F.relu(edge_pos_rep)
+                    edge_neg_rep = self.layer(edge_neg_rep)  # [bs, -1, emb_dim]
+                    edge_neg_rep = F.relu(edge_neg_rep)
+                    R_j += self.scorer(edge_pos_rep).squeeze(-1)
+                    R_k += self.scorer(edge_neg_rep).squeeze(-1)
+                    
                 elif self.score_type == "transE":
                     J_bias_l = self.bpr.i_bias_l(Js)
                     K_bias_l = self.bpr.i_bias_l(Ks)
                     
-                    R_j += self.transE_predict(U_latent_pos, I_latent_pos, J_latent, J_bias_l)
-                    R_k += self.transE_predict(U_latent_neg, I_latent_neg, K_latent, K_bias_l)             
-                # U_latent_pos = U_latent
-                # U_latent_neg = U_latent
-                # I_latent_pos = I_latent
-                # I_latent_neg = I_latent
+                    R_j += self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
+                    R_k += self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
             
+                U_visual = self.bpr.u_embeddings_v(Us)
+                vis_I = self.visual_features[Is]
+                vis_J = self.visual_features[Js]
+                vis_K = self.visual_features[Ks]
+                I_visual = self.bpr.visual_nn_comp(vis_I) #bs, hidden_dim
+                J_visual = self.bpr.visual_nn_comp(vis_J)
+                K_visual = self.bpr.visual_nn_comp(vis_K)
+
+                if self.use_selfatt:
+                    all_item_latent_v = self.bpr.visual_nn_comp(self.visual_features)
+                    topk_users_idxs = self.find_topk_similar_users(U_visual, self.bpr.u_embeddings_v.weight.clone().detach(), self.top_k_u)
+                    topk_Is_idxs = self.find_topk_similar_users(I_visual, all_item_latent_v, self.top_k_i)
+                    topk_Js_idxs = self.find_topk_similar_users(J_visual, all_item_latent_v, self.top_k_i)
+                    topk_Ks_idxs = self.find_topk_similar_users(K_visual, all_item_latent_v, self.top_k_i)
+                    U_visual = self.aggregate_item_embeddings(self.bpr.u_embeddings_v, topk_users_idxs, U_visual)    
+                    I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual)
+                    J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual)
+                    K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual)
+                    if self.use_Nor:
+                        U_visual = F.normalize(U_visual,dim=0)
+                        I_visual = F.normalize(I_visual,dim=0)
+                        J_visual = F.normalize(J_visual,dim=0)
+                        K_visual = F.normalize(K_visual,dim=0)
+                if self.score_type == "mlp":
+                    pass
+                elif self.score_type == "transE":
+                    R_j_v = self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
+                    R_k_v = self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
+                    R_j += R_j_v
+                    R_k += R_k_v
+                    
             if self.use_path:
                 pos_paths = batch[5]
                 neg_paths = batch[6]
@@ -475,6 +506,11 @@ class TransMatch(Module):
         topk_item_embeddings = item_embeddings(topk_indices)
         aggregated_embeddings = self.self_attention(batch_item_embeddings, topk_item_embeddings)
         return aggregated_embeddings
+        
+    def aggregate_embeddings(self, user_embeddings, topk_indices, batch_user_embeddings):
+        topk_user_embeddings = user_embeddings[topk_indices]
+        aggregated_embeddings = self.self_attention(batch_user_embeddings, topk_user_embeddings)
+        return aggregated_embeddings
 
     def inference(self, batch):
         Us = batch[0]
@@ -524,21 +560,22 @@ class TransMatch(Module):
                 J_latent = self.bpr.i_embeddings_i(Js)
                 K_latent = self.bpr.i_embeddings_i(Ks.squeeze(1))
                 # print(U_latent.size(), I_latent.size(), J_latent.size(), K_latent.size())
-                topk_users_idxs = self.find_topk_similar_users(U_latent, self.bpr.u_embeddings_l.weight.clone().detach(), self.top_k_u)
-                topk_Is_idxs = self.find_topk_similar_users(I_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Js_idxs = self.find_topk_similar_users(J_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Ks_idxs = self.find_topk_similar_users(K_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-            
+                
                 if self.use_selfatt:
+                    topk_users_idxs = self.find_topk_similar_users(U_latent, self.bpr.u_embeddings_l.weight.clone().detach(), self.top_k_u)
+                    topk_Is_idxs = self.find_topk_similar_users(I_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+                    topk_Js_idxs = self.find_topk_similar_users(J_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+                    topk_Ks_idxs = self.find_topk_similar_users(K_latent, self.bpr.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            
                     U_latent = self.aggregate_item_embeddings(self.bpr.u_embeddings_l, topk_users_idxs, U_latent)    
                     I_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Is_idxs, I_latent)
                     J_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Js_idxs, J_latent)
                     K_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Ks_idxs, K_latent)
-
-                    U_latent = F.normalize(U_latent,dim=0)
-                    I_latent = F.normalize(I_latent,dim=0)
-                    J_latent = F.normalize(J_latent,dim=0)
-                    K_latent = F.normalize(K_latent,dim=0)
+                    if self.use_Nor:
+                        U_latent = F.normalize(U_latent,dim=0)
+                        I_latent = F.normalize(I_latent,dim=0)
+                        J_latent = F.normalize(J_latent,dim=0)
+                        K_latent = F.normalize(K_latent,dim=0)
 
                     U_latent = U_latent.unsqueeze(1).expand(-1, j_num, -1)
                     I_latent = I_latent.unsqueeze(1).expand(-1, j_num, -1)
@@ -553,6 +590,40 @@ class TransMatch(Module):
                         J_bias_l = self.bpr.i_bias_l(J_list)
                         # print(U_latent.size(), I_latent.size(), Js_latent_ii.size(), J_bias_l.size())
                         scores += self.transE_predict(U_latent, I_latent, Js_latent_ii, J_bias_l) 
+                
+                U_visual = self.bpr.u_embeddings_v(Us)
+                vis_I = self.visual_features[Is]
+                vis_J = self.visual_features[Js]
+                vis_K = self.visual_features[Ks.squeeze(1)]
+                I_visual = self.bpr.visual_nn_comp(vis_I) #bs, hidden_dim
+                J_visual = self.bpr.visual_nn_comp(vis_J)
+                K_visual = self.bpr.visual_nn_comp(vis_K)
+
+                if self.use_selfatt:
+                    all_item_latent_v = self.bpr.visual_nn_comp(self.visual_features)
+                    topk_users_idxs = self.find_topk_similar_users(U_visual, self.bpr.u_embeddings_v.weight.clone().detach(), self.top_k_u)
+                    topk_Is_idxs = self.find_topk_similar_users(I_visual, all_item_latent_v, self.top_k_i)
+                    topk_Js_idxs = self.find_topk_similar_users(J_visual, all_item_latent_v, self.top_k_i)
+                    topk_Ks_idxs = self.find_topk_similar_users(K_visual, all_item_latent_v, self.top_k_i)
+                    U_visual = self.aggregate_item_embeddings(self.bpr.u_embeddings_v, topk_users_idxs, U_visual)    
+                    I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual)
+                    J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual)
+                    K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual)
+                    if self.use_Nor:
+                        U_visual = F.normalize(U_visual,dim=0)
+                        I_visual = F.normalize(I_visual,dim=0)
+                        J_visual = F.normalize(J_visual,dim=0)
+                        K_visual = F.normalize(K_visual,dim=0)
+
+                U_visual = U_visual.unsqueeze(1).expand(-1, j_num, -1)
+                I_visual = I_visual.unsqueeze(1).expand(-1, j_num, -1)
+                Js_visual_ii = torch.stack((J_visual, K_visual), dim=1)
+                
+                J_bias_v = self.bpr.i_bias_v(J_list)
+                self.vis_scores = self.transE_predict(U_visual, I_visual, Js_visual_ii, J_bias_v)
+
+                scores += self.vis_scores
+
     
             if self.use_path:
                 j_paths = batch[4]

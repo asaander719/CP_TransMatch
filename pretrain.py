@@ -5,6 +5,8 @@ from torch.optim import Adam
 import numpy as np
 from datetime import datetime
 import argparse
+import logging
+import argparse
 
 import pdb
 import shutil
@@ -16,6 +18,16 @@ from trainer.TransMatch_pretrain import TransMatch
 from trainer.BPR import BPR
 from util.eval_utils import *
 import pandas as pd
+
+def get_logger():
+    logger_name = "main-logger"
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    fmt = "[%(asctime)s %(levelname)s %(filename)s line %(lineno)d %(process)d] %(message)s"
+    handler.setFormatter(logging.Formatter(fmt))
+    logger.addHandler(handler)
+    return logger
 
 def evaluating(model, testData, device, conf, topks=[1]):
     model.eval()
@@ -45,6 +57,8 @@ def continue_training(model_path):
 
 def Train_Eval(conf):
     dataset = Dataset(conf)
+    global logger
+    logger = get_logger()
     conf["user_num"] = len(dataset.user_map)
     conf["item_num"] = len(dataset.item_map)
     conf["cate_num"] = len(dataset.cate_items)
@@ -56,6 +70,7 @@ def Train_Eval(conf):
         else:
             model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
+    logger.info(model)
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
 
     optimizer = Adam([{'params': model.parameters(),'lr': conf["lr"], "weight_decay": conf["wd"]}])
