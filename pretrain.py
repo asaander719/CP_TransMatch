@@ -95,7 +95,7 @@ def Train_Eval(conf):
                     if conf["save_results"]:
                         if auc > best_auc:
                             best_auc = auc
-                            np.save(result_path + "epoch_%d_%s_%.4f"%(epoch, test_setting, best_auc), preds.numpy())
+                            # np.save(result_path + "epoch_%d_%s_%.4f"%(epoch, test_setting, best_auc), preds.numpy())
                             if conf['pretrain_mode']:
                                 pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
                                 pretrain_model_dir = "model/iqon_s/pretrained_model/"
@@ -105,7 +105,7 @@ def Train_Eval(conf):
                             else:
                                 shutil.rmtree(model_path)
                                 os.makedirs(model_path) 
-                                torch.save(model, model_path + "epoch_%d_%s_auc_%.4f"%(epoch, test_setting, best_auc)) 
+                                torch.save(model, model_path + "epoch_%d_%s_%.4f"%(epoch, test_setting, best_auc)) 
 
                     print("%s"%test_setting[:-5], curr_time, result_str)
                     output_f = open(performance_files[test_setting], "a")
