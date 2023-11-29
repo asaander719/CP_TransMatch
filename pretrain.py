@@ -12,7 +12,7 @@ import os
 import yaml
 
 from data.utility import Dataset
-from trainer.TransMatch import TransMatch
+from trainer.TransMatch_pretrain import TransMatch
 from trainer.BPR import BPR
 from util.eval_utils import *
 import pandas as pd
@@ -97,9 +97,10 @@ def Train_Eval(conf):
                             best_auc = auc
                             np.save(result_path + "epoch_%d_%s_%.4f"%(epoch, test_setting, best_auc), preds.numpy())
                             if conf['pretrain_mode']:
-                                pretrain_model_file = f"{conf['model']}-{'pretrained_model'}"
-                                pretrain_model_path = "model/iqon_s/pretrained_model/" + pretrain_model_file 
-                                os.makedirs(pretrain_model_path) 
+                                pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+                                pretrain_model_dir = "model/iqon_s/pretrained_model/"
+                                os.makedirs(pretrain_model_dir, exist_ok=True)
+                                pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
                                 torch.save(model, pretrain_model_path)
                             else:
                                 shutil.rmtree(model_path)
@@ -196,12 +197,21 @@ if __name__ == "__main__":
     conf["performance_path"] += (conf["dataset"] + "/")
     conf["result_path"] += (conf["dataset"] + "/")
     conf["model_path"] += (conf["dataset"] + "/")
-    conf['pretrain_mode'] = True
-    print('<<<<<<<< Start Pre-training >>>>>>>>')
-    Train_Eval(conf)
-    print('<<<<<<<< Pre-training End >>>>>>>>')
-    conf['pretrain_mode'] = False
-    Train_Eval(conf)
+    
+    pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+    pretrain_model_dir = "model/iqon_s/pretrained_model/"
+    pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
+
+    if os.path.exists(pretrain_model_path):
+        conf['pretrain_mode'] = False
+        Train_Eval(conf)
+    else:
+        conf['pretrain_mode'] = True
+        print('<<<<<<<< Start Pre-training >>>>>>>>')
+        Train_Eval(conf)
+        print('<<<<<<<< Pre-training End >>>>>>>>')
+        conf['pretrain_mode'] = False
+        Train_Eval(conf)
 
 
                                

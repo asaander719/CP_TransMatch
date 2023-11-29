@@ -89,7 +89,25 @@ class MeanAggregator(Aggregator):
             self_vectors = torch.mean(neighbor_vectors, dim=-2)
         return self_vectors, neighbor_vectors 
   
-    
+class SelfAttention(nn.Module):
+    def __init__(self, embedding_dim):
+        super(SelfAttention, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.query = nn.Linear(embedding_dim, embedding_dim)
+        self.key = nn.Linear(embedding_dim, embedding_dim)
+        self.value = nn.Linear(embedding_dim, embedding_dim)
+
+    def forward(self, user_emb, top_k_emb):
+        # Query: 原始用户, Key/Value: Top-K相似用户
+        q = self.query(user_emb).unsqueeze(1)  # [batch_size, 1, embedding_dim]
+        k = self.key(top_k_emb)                # [batch_size, k, embedding_dim]
+        v = self.value(top_k_emb)              # [batch_size, k, embedding_dim]
+
+        attention_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.embedding_dim ** 0.5)
+        attention = F.softmax(attention_scores, dim=-1)
+
+        weighted_sum = torch.matmul(attention, v).squeeze(1)
+        return weighted_sum    
 
 class TransMatch(Module):
     def __init__(self, conf, neighbor_params=None, visual_features=None, item_cate=None):        
@@ -97,6 +115,12 @@ class TransMatch(Module):
         self.visual_features = visual_features
         self.use_context = conf["context"]
         self.use_path = conf["path"]
+        self.hidden_dim = conf["hidden_dim"]
+        self.user_num = conf["user_num"]
+        self.item_num = conf["item_num"]
+        self.batch_size = conf["batch_size"]
+        self.device = conf["device"]
+        self.score_type = conf["score_type"]
 
         self.neighbor_params = neighbor_params
         self.entity2edges = torch.LongTensor(self.neighbor_params[0]).to(self.device)
@@ -109,13 +133,15 @@ class TransMatch(Module):
         self.pretrain_mode = conf["pretrain_mode"]
         self.pretrain_layer_num = conf['pretrain_layer_num']
 
-        self.pretrain_model_file = f"{conf['model']}-{'pretrained_model'}"
-        self.pretrain_model_path = "model/iqon_s/pretrained_model/" + self.pretrain_model_file 
         self.use_pretrain = conf['use_pretrain']
         self.use_selfatt = conf['use_selfatt']
         self.top_k_u = conf["top_k_u"]
         self.top_k_i = conf["top_k_i"]
         self.self_attention = SelfAttention(self.hidden_dim)
+
+        self.pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+        self.pretrain_model_dir = "model/iqon_s/pretrained_model/"
+        self.pretrain_model_path = os.path.join(self.pretrain_model_dir, self.pretrain_model_file)
 
         if os.path.exists(self.pretrain_model_path):
             self.bpr = torch.load(self.pretrain_model_path)
@@ -312,7 +338,7 @@ class TransMatch(Module):
         Ks = batch[3]
 
         if self.pretrain_mode:
-            R_j, R_k = self.bpr.forward(Us, Is, Js, Ks)
+            R_j, R_k = self.bpr.forward(batch)
 
         else:
             if self.use_context:
@@ -357,7 +383,7 @@ class TransMatch(Module):
                     R_k += R_k_v
 
             else:    
-                R_j, R_k = self.bpr.forward(Us, Is, Js, Ks)  
+                R_j, R_k = self.bpr.forward(batch)  
                 
             if self.use_pretrain:
                 topk_users_idxs = self.find_topk_similar_users(U_latent, self.bpr.u_embeddings_l.weight.clone().detach(), self.top_k_u)
@@ -458,7 +484,7 @@ class TransMatch(Module):
         J_bias_l = self.bpr.i_bias_l(J_list)
 
         if self.pretrain_mode:
-            scores = self.bpr.inference(Us, Is, Js, Ks)
+            scores = self.bpr.inference(batch)
 
         else:
             if self.use_context:
@@ -486,7 +512,7 @@ class TransMatch(Module):
                     scores += self.vis_scores
 
             else:
-                scores = self.bpr.inference(Us, Is, Js, Ks)
+                scores = self.bpr.inference(batch)
 
             if self.use_pretrain:
                 topk_users_idxs = self.find_topk_similar_users(U_latent.squeeze(1), self.bpr.u_embeddings_l.weight.clone().detach(), self.top_k_u)

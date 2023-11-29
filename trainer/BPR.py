@@ -19,6 +19,8 @@ class BPR(Module):
         self.batch_size = conf["batch_size"]
         self.device = conf["device"]
         self.score_type = conf["score_type"]
+        self.pretrain_mode = conf['pretrain_mode']
+        self.use_pretrain = conf['use_pretrain']
 
         self.userEmb = F.normalize(torch.normal(mean=torch.zeros(self.user_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
@@ -66,11 +68,11 @@ class BPR(Module):
         # experiment shows that j_bias is quite effective, and ||Mrh+r-Mrt|| is effective than h*r*t (DistMult).
         return pred.squeeze(-1)
 
-    def forward(self, Us, Is, Js, Ks):
-        # Us = batch[0]
-        # Is = batch[1]
-        # Js = batch[2] 
-        # Ks = batch[3] 
+    def forward(self, batch):
+        Us = batch[0]
+        Is = batch[1]
+        Js = batch[2] 
+        Ks = batch[3] 
 
         U_latent = self.u_embeddings_l(Us)
             # T = self.T.expand_as(U_latent)  # [B H]
@@ -113,18 +115,20 @@ class BPR(Module):
             
         R_j += R_j_v
         R_k += R_k_v
-        # loss = bpr_loss(R_j, R_k)
+        loss = bpr_loss(R_j, R_k)
         # loss = -torch.log(self.margin + torch.sigmoid(R_j - R_k)).mean()
         # 只有当R_j比R_k的score至少大出margin值时，loss才会更小,以防止negative sample和positive sample过于close
         # but only useful when those two are close, not effective if most of samples are not close
+        if self.pretrain_mode: 
+            return loss 
+        elif self.use_pretrain or not self.pretrain_mode: 
+            return R_j, R_k
 
-        return R_j, R_k
-
-    def inference(self, Us, Is, Js, Ks):
-        # Us = batch[0]
-        # Is = batch[1]
-        # Js = batch[2] 
-        # Ks = batch[3]
+    def inference(self, batch):
+        Us = batch[0]
+        Is = batch[1]
+        Js = batch[2] 
+        Ks = batch[3]
         J_list = torch.cat([Js.unsqueeze(1), Ks], dim=-1)
         j_num = J_list.size(1)
         Us = Us.unsqueeze(1).expand(-1, j_num) #bs, j_num
@@ -162,9 +166,9 @@ class BPR(Module):
         scores += self.vis_scores
         return scores
 
-# def bpr_loss(pos_score, neg_score):
-#     loss = - F.logsigmoid(pos_score - neg_score).mean()
-#     # # loss = torch.mean(loss)
-#     # loss = torch.mean((- F.logsigmoid(pos_score - neg_score)).sum())
+def bpr_loss(pos_score, neg_score):
+    loss = - F.logsigmoid(pos_score - neg_score).mean()
+    # # loss = torch.mean(loss)
+    # loss = torch.mean((- F.logsigmoid(pos_score - neg_score)).sum())
     
-#     return loss
+    return loss

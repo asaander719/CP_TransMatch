@@ -16,8 +16,8 @@ model_path: /model/
 result_path: /results/
 performance_path: /performance/
 
-save_results: 0  #save prediction results in evaluation if 1
-save_model: 0  #save the model if 1
+save_results: 1  #save prediction results in evaluation if 1
+save_model: 1  #save the model if 1
 data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
 context: 1  #considering context-enhanced module if 1
