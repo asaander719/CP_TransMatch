@@ -402,8 +402,8 @@ class TransMatch(Module):
                     J_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Js_idxs, J_latent)
                     K_latent = self.aggregate_item_embeddings(self.bpr.i_embeddings_i, topk_Ks_idxs, K_latent)
                     if self.use_Nor:
-                        U_latent = F.normalize(U_latent_pos,dim=0)
-                        I_latent = F.normalize(I_latent_neg,dim=0)
+                        U_latent = F.normalize(U_latent,dim=0)
+                        I_latent = F.normalize(I_latent,dim=0)
                         J_latent = F.normalize(J_latent,dim=0)
                         K_latent = F.normalize(K_latent,dim=0)
 
