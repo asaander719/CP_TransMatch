@@ -33,3 +33,8 @@
     ```
     python get_performance.py -d=iqon_s
     ```
+5. To enhance the initial representation by pretraining from TransE, then train the CP_TransMatch from the second stage:
+
+    ```
+    python pretrain.py -d=iqon_s -g=0
+    ```

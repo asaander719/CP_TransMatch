@@ -9,9 +9,9 @@ from abc import abstractmethod
 import numpy as np
 
 
-class BPR(Module):
+class TransE(Module):
     def __init__(self, conf, visual_features=None, item_cate=None):
-        super(BPR, self).__init__()
+        super(TransE, self).__init__()
         self.visual_features = visual_features
         self.hidden_dim = conf["hidden_dim"]
         self.user_num = conf["user_num"]
