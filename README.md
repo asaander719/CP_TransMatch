@@ -38,3 +38,4 @@
     ```
     python pretrain.py -d=iqon_s -g=0
     ```
+    or you can also download the well pretrained model from [here] (https://drive.google.com/file/d/1YOaMxOJoLaDkpOAL5FmSHN6jxtUsoq1I/view?usp=sharing)
