@@ -141,7 +141,7 @@ class TransMatch(Module):
         self.self_attention = SelfAttention(self.hidden_dim)
         self.self_attention_v = SelfAttention(self.hidden_dim)
 
-        self.pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+        self.pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
         self.pretrain_model_dir = "model/iqon_s/pretrained_model/"
         self.pretrain_model_path = os.path.join(self.pretrain_model_dir, self.pretrain_model_file)
 
@@ -179,6 +179,18 @@ class TransMatch(Module):
         if self.use_path:
             self.path_weight = conf["path_weight"]
             self.path_agg = conf["path_agg"]
+
+    def _get_all_bottoms_id(self):
+        train_df = pd.read_csv("data/iqon_s/train.csv", header=None).astype('int')
+        train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+        test_df = pd.read_csv("data/iqon_s/test.csv", header=None).astype('int')
+        test_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+        valid_df = pd.read_csv("data/iqon_s/val.csv", header=None).astype('int')
+        valid_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+        all_bottoms_id = pd.concat([train_df["pos_bottom_idx"], test_df["pos_bottom_idx"], valid_df["pos_bottom_idx"],
+            train_df["neg_bottom_idx"], test_df["neg_bottom_idx"], valid_df["neg_bottom_idx"]], ignore_index=True).unique()
+        return torch.LongTensor(all_bottoms_id)
+        
 
     def _get_neighbor_aggregators(self):
         aggregators = []  # store all aggregators

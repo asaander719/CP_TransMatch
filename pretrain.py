@@ -71,6 +71,7 @@ def Train_Eval(conf):
             model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
     logger.info(model)
+    logger.info(conf)
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
 
     optimizer = Adam([{'params': model.parameters(),'lr': conf["lr"], "weight_decay": conf["wd"]}])
@@ -112,7 +113,7 @@ def Train_Eval(conf):
                             best_auc = auc
                             # np.save(result_path + "epoch_%d_%s_%.4f"%(epoch, test_setting, best_auc), preds.numpy())
                             if conf['pretrain_mode']:
-                                pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+                                pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
                                 pretrain_model_dir = "model/iqon_s/pretrained_model/"
                                 os.makedirs(pretrain_model_dir, exist_ok=True)
                                 pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
@@ -212,8 +213,9 @@ if __name__ == "__main__":
     conf["performance_path"] += (conf["dataset"] + "/")
     conf["result_path"] += (conf["dataset"] + "/")
     conf["model_path"] += (conf["dataset"] + "/")
+    conf['pretrained_model'] = TransE
     
-    pretrain_model_file = f"{conf['model']}-{'pretrained_model'}.pth.tar"
+    pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
     pretrain_model_dir = "model/iqon_s/pretrained_model/"
     pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
 
