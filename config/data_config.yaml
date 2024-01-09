@@ -1,5 +1,5 @@
 # root_datapath: "/mnt/juanjuan/cafidata/UI_TransE/data/"
-root_datapath: "/home/asaliao/CP_TransMatch/CP_TransMatch/data/"
+root_datapath: "/home/asaliao/CP_TransMatch/data/"
 user_map: "/user_map.json"
 item_map: "/item_map.json"
 visual_features_dict_ori: "/visualfeatures"
