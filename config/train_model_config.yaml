@@ -21,9 +21,9 @@ save_model: 1  #save the model if 1
 data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
 
-context: 1  #considering context-enhanced module if 1
+context: 0  #considering context-enhanced module if 1
 use_pretrain: 1 # considering pretrained model if 1
-use_Nor: 1  #considering normalization if 1
+use_Nor: 0  #considering normalization if 1
 top_k_u: 5  # topk similar users
 top_k_i: 5  # topk similar items
 path: 0  #considering path-enhanced module if 1

@@ -213,8 +213,8 @@ if __name__ == "__main__":
     conf["performance_path"] += (conf["dataset"] + "/")
     conf["result_path"] += (conf["dataset"] + "/")
     conf["model_path"] += (conf["dataset"] + "/")
-    conf['pretrained_model'] = TransE
-    
+    conf['pretrained_model'] = "TransE"
+
     pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
     pretrain_model_dir = "model/iqon_s/pretrained_model/"
     pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)

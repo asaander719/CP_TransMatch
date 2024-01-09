@@ -121,7 +121,7 @@ class TransE(Module):
         # but only useful when those two are close, not effective if most of samples are not close
         if self.pretrain_mode: 
             return loss 
-        elif self.use_pretrain or not self.pretrain_mode: 
+        else:
             return R_j, R_k
 
     def inference(self, batch):
