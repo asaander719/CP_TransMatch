@@ -197,11 +197,11 @@ class TransMatch(Module):
             train_df["neg_bottom_idx"], test_df["neg_bottom_idx"], valid_df["neg_bottom_idx"]], ignore_index=True).unique()
         return torch.LongTensor(all_bottoms_id)
 
-    def find_topk_js_for_ui(self, U_latent, I_latent, J_bias, K_latent, all_embs):
+    def find_topk_js_for_ui(self, U_latent, I_latent, J_bias, J_latent, all_embs):
         # all_bottoms_embs = self.transe.i_embeddings_i(self.all_bottoms_id)
         # all_bottoms_feas_v = self.transe.visual_features(self.all_bottoms_id)
         # 剔除positive ks -> 'j'的索引
-        mask = torch.all(all_embs.unsqueeze(1) != K_latent.unsqueeze(0), dim=-1).all(dim=-1)
+        mask = torch.all(all_embs.unsqueeze(1) != J_latent.unsqueeze(0), dim=-1).all(dim=-1)
         masked_j_embs = all_embs[mask]
 
         U_latent = U_latent.unsqueeze(1).expand(-1, masked_j_embs.size(0), -1) #bs, all_bottoms, hd
@@ -462,14 +462,14 @@ class TransMatch(Module):
             all_embs = self.transe.i_embeddings_i.weight.clone().detach()
             all_feas_v = self.transe.visual_nn_comp(self.transe.visual_features)
 
-            topk_js_scores =  self.find_topk_js_for_ui(U_latent_ori, I_latent_ori, J_bias_l, K_latent_ori, all_embs)
+            topk_js_scores =  self.find_topk_js_for_ui(U_latent_ori, I_latent_ori, J_bias_l, J_latent_ori, all_embs)
             pos_score = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
-            topk_js_scores +=  self.find_topk_js_for_ui(U_visual_ori, I_visual_ori, J_bias_v, K_visual_ori, all_feas_v)
+            topk_js_scores +=  self.find_topk_js_for_ui(U_visual_ori, I_visual_ori, J_bias_v, J_visual_ori, all_feas_v)
             pos_score += self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
 
             # Compute CL loss with hard negatives
             # cl_loss = self.contrastive_loss(pos_score, topk_js_scores, self.margin) 
-            cl_loss = self.contrastive_loss(pos_score, topk_js_scores, self.temp)
+            cl_loss = self.hard_contrastive_loss(pos_score, topk_js_scores, R_k, self.temp)
 
             # R_j, R_k = self.transe.forward(batch)
             if self.use_context:
@@ -558,9 +558,18 @@ class TransMatch(Module):
         positive_loss = -torch.log(exp_pos_score / torch.sum(exp_pos_score))
 
         exp_neg_scores = torch.exp(neg_scores / temp)
-        negative_loss = -torch.log(torch.sum(exp_neg_scores, dim=1) / torch.sum(exp_neg_scores))
+        negative_loss = -torch.log(torch.sum(exp_neg_scores, dim=-1) / torch.sum(exp_neg_scores))
 
         total_loss = torch.mean(positive_loss + negative_loss)
+        return total_loss
+    
+    def hard_contrastive_loss(self, pos_score, hard_neg_scores, true_neg_score, temp):
+        exp_pos_score = torch.exp(pos_score / temp)
+        exp_hard_neg_scores = torch.sum(torch.exp(true_neg_score / temp), dim=-1)
+        exp_true_neg_score = torch.exp(true_neg_score / temp)
+        ttl_score = exp_pos_score + exp_hard_neg_scores + exp_true_neg_score 
+        total_loss = - torch.mean(torch.log(exp_pos_score / ttl_score))
+
         return total_loss
 
     
