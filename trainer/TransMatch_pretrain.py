@@ -195,13 +195,15 @@ class TransMatch(Module):
         valid_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
         all_bottoms_id = pd.concat([train_df["pos_bottom_idx"], test_df["pos_bottom_idx"], valid_df["pos_bottom_idx"],
             train_df["neg_bottom_idx"], test_df["neg_bottom_idx"], valid_df["neg_bottom_idx"]], ignore_index=True).unique()
-        return torch.LongTensor(all_bottoms_id)
+        return torch.LongTensor(all_bottoms_id).to(self.device)
 
     def find_topk_js_for_ui(self, U_latent, I_latent, J_bias, J_latent, all_embs):
         # all_bottoms_embs = self.transe.i_embeddings_i(self.all_bottoms_id)
         # all_bottoms_feas_v = self.transe.visual_features(self.all_bottoms_id)
         # 剔除positive ks -> 'j'的索引
-        mask = torch.all(all_embs.unsqueeze(1) != J_latent.unsqueeze(0), dim=-1).all(dim=-1)
+        mask_positive = torch.all(all_embs.unsqueeze(1) != J_latent.unsqueeze(0), dim=-1).all(dim=-1)
+        mask_input = torch.all(all_embs.unsqueeze(1) != I_latent.unsqueeze(0), dim=-1).all(dim=-1)
+        mask = mask_positive & mask_input
         masked_j_embs = all_embs[mask]
 
         U_latent = U_latent.unsqueeze(1).expand(-1, masked_j_embs.size(0), -1) #bs, all_bottoms, hd
@@ -385,6 +387,7 @@ class TransMatch(Module):
             J_latent_ori  = self.transe.i_embeddings_i(Js)
             K_latent_ori  = self.transe.i_embeddings_i(Ks)
             J_bias_l = self.transe.i_bias_l(Js)
+            K_bias_l = self.transe.i_bias_l(Ks)
             topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
             topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
             topk_Js_idxs = self.find_topk_similar_users(J_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
@@ -416,8 +419,8 @@ class TransMatch(Module):
                 R_k = self.scorer(edge_neg_rep).squeeze(-1)
                 
             elif self.score_type == "transE":
-                J_bias_l = self.transe.i_bias_l(Js)
-                K_bias_l = self.transe.i_bias_l(Ks)
+                # J_bias_l = self.transe.i_bias_l(Js)
+                # K_bias_l = self.transe.i_bias_l(Ks)
                 
                 R_j = self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
                 R_k = self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
@@ -461,15 +464,20 @@ class TransMatch(Module):
 
             all_embs = self.transe.i_embeddings_i.weight.clone().detach()
             all_feas_v = self.transe.visual_nn_comp(self.transe.visual_features)
+            # all_bottoms_embs = self.transe.i_embeddings_i(self.all_bottoms_id)
+            # all_bottoms_feas_v = self.transe.visual_features(self.all_bottoms_id)
 
             topk_js_scores =  self.find_topk_js_for_ui(U_latent_ori, I_latent_ori, J_bias_l, J_latent_ori, all_embs)
             pos_score = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
+            true_neg_score = self.transE_predict(U_latent_ori, I_latent_ori, K_latent_ori, K_bias_l) 
             topk_js_scores +=  self.find_topk_js_for_ui(U_visual_ori, I_visual_ori, J_bias_v, J_visual_ori, all_feas_v)
             pos_score += self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
+            true_neg_score += self.transE_predict(U_visual_ori, I_visual_ori, K_visual_ori, K_bias_v)
 
             # Compute CL loss with hard negatives
-            # cl_loss = self.contrastive_loss(pos_score, topk_js_scores, self.margin) 
-            cl_loss = self.hard_contrastive_loss(pos_score, topk_js_scores, R_k, self.temp)
+            cl_loss = self.contrastive_loss_1(pos_score, topk_js_scores, self.margin) 
+            # cl_loss = self.hard_contrastive_loss(pos_score, topk_js_scores, true_neg_score, self.temp)
+            # cl_loss = self.contrastive_loss(pos_score, topk_js_scores, self.temp)
 
             # R_j, R_k = self.transe.forward(batch)
             if self.use_context:
@@ -546,12 +554,12 @@ class TransMatch(Module):
             return 0.8 * loss + 0.2 * cl_loss
 
 
-    # def contrastive_loss(self, pos_score, neg_scores, margin):
-    #     positive_loss = torch.mean((pos_score - margin) ** 2)
-    #     negative_loss = torch.mean(F.relu(margin - neg_scores) ** 2, dim=1)
-    #     negative_loss = torch.mean(negative_loss)
-    #     total_loss = positive_loss + negative_loss
-    #     return total_loss
+    def contrastive_loss_1(self, pos_score, neg_scores, margin):
+        positive_loss = torch.mean((pos_score - margin) ** 2)
+        negative_loss = torch.mean(F.relu(margin - neg_scores) ** 2, dim=1)
+        negative_loss = torch.mean(negative_loss)
+        total_loss = positive_loss + negative_loss
+        return total_loss
 
     def contrastive_loss(self, pos_score, neg_scores, temp):
         exp_pos_score = torch.exp(pos_score / temp)
