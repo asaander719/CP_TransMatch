@@ -223,7 +223,31 @@ if __name__ == "__main__":
 
     if os.path.exists(pretrain_model_path):
         conf['pretrain_mode'] = False
-        Train_Eval(conf)
+        for s in [0, 1]: 
+            conf['use_selfatt'] = s
+            for k in [3, 5, 1]:
+                conf['top_k_i'] = k
+                conf['top_k_u'] = k
+                for c in [1, 0]:
+                    conf['context'] = c #considering context-enhanced module if 1
+                    for h in [0, 1]:
+                        conf['use_hard_neg'] = h
+
+                        if h == 0:
+                            conf['batch_size'] = 1024
+                            conf['test_batch_size'] =1024
+                        else: 
+                            conf['batch_size'] = 256
+                            conf['test_batch_size'] = 256
+
+                        for N in [0, 1]:
+                            conf['use_Nor'] = N
+                            for t in [1, 0]:
+                                conf["use_topk_ij_for_u"] = t
+                                print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
+                                    conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
+                                    "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
+                                Train_Eval(conf)
     else:
         conf['pretrain_mode'] = True
         print('<<<<<<<< Start Pre-training >>>>>>>>')
