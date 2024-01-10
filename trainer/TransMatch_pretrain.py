@@ -90,13 +90,17 @@ class MeanAggregator(Aggregator):
             self_vectors = torch.mean(neighbor_vectors, dim=-2)
         return self_vectors, neighbor_vectors 
   
-class SelfAttention(nn.Module):
-    def __init__(self, embedding_dim):
-        super(SelfAttention, self).__init__()
+class Attention(nn.Module):
+    def __init__(self, embedding_dim, attn_dropout_prob = 0.2, hidden_dropout_prob=0.2):
+        super(Attention, self).__init__()
         self.embedding_dim = embedding_dim
         self.query = nn.Linear(embedding_dim, embedding_dim)
         self.key = nn.Linear(embedding_dim, embedding_dim)
         self.value = nn.Linear(embedding_dim, embedding_dim)
+
+        # self.attn_dropout = nn.Dropout(p=attn_dropout_prob)
+        # # self.out_dropout = nn.Dropout(p=hidden_dropout_prob)
+        # self.LayerNorm = nn.LayerNorm(embedding_dim)
 
     def forward(self, user_emb, top_k_emb):
         # Query: 原始用户, Key/Value: Top-K相似用户
@@ -105,13 +109,15 @@ class SelfAttention(nn.Module):
         v = self.value(top_k_emb)              # [batch_size, k, embedding_dim]
 
         attention_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.embedding_dim ** 0.5)
-        attention = F.softmax(attention_scores, dim=-1)
+        p_attn = F.softmax(attention_scores, dim=-1)
 
-        weighted_sum = torch.matmul(attention, v).squeeze(1)
+        # p_attn = self.attn_dropout(p_attn)
+        weighted_sum = torch.matmul(p_attn, v).squeeze(1)
+        # weighted_sum = self.LayerNorm(weighted_sum)
         return weighted_sum    
 
 class TransMatch(Module):
-    def __init__(self, conf, neighbor_params=None, visual_features=None, item_cate=None):        
+    def __init__(self, conf, u_topk_IJs, neighbor_params=None, visual_features=None, item_cate=None):        
         super(TransMatch, self).__init__()
         self.visual_features = visual_features
         self.use_context = conf["context"]
@@ -125,6 +131,7 @@ class TransMatch(Module):
         self.use_Nor = conf['use_Nor']
         self.top_k_i = conf['top_k_i']
         self.use_hard_neg = conf['use_hard_neg']
+        self.use_topk_ij_for_u = conf['use_topk_ij_for_u']
 
         self.neighbor_params = neighbor_params
         self.entity2edges = torch.LongTensor(self.neighbor_params[0]).to(self.device)
@@ -133,6 +140,7 @@ class TransMatch(Module):
         self.relation2entities = torch.LongTensor(self.neighbor_params[3]).to(self.device)
         self.entity2edge_set = self.neighbor_params[4]
         self.relation2entity_set = self.neighbor_params[5]
+        self.u_topk_IJs = u_topk_IJs.to(self.device)
             
         self.pretrain_mode = conf["pretrain_mode"]
         self.pretrain_layer_num = conf['pretrain_layer_num']
@@ -141,11 +149,11 @@ class TransMatch(Module):
         self.use_selfatt = conf['use_selfatt']
         self.top_k_u = conf["top_k_u"]
         self.top_k_i = conf["top_k_i"]
-        self.self_attention = SelfAttention(self.hidden_dim)
-        self.self_attention_v = SelfAttention(self.hidden_dim)
+        self.self_attention = Attention(self.hidden_dim)
+        self.self_attention_v = Attention(self.hidden_dim)
 
-        self.self_attention_u = SelfAttention(self.hidden_dim)
-        self.self_attention_v_u = SelfAttention(self.hidden_dim)
+        self.self_attention_u = Attention(self.hidden_dim)
+        self.self_attention_v_u = Attention(self.hidden_dim)
 
         self.pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
         self.pretrain_model_dir = "model/iqon_s/pretrained_model/"
@@ -391,6 +399,15 @@ class TransMatch(Module):
             J_latent_ori  = self.transe.i_embeddings_i(Js)
             K_latent_ori  = self.transe.i_embeddings_i(Ks)
 
+            if self.use_topk_ij_for_u:
+                U_latent = self._group_topkIJs_for_U_(self.transe.i_embeddings_i, Us, U_latent_ori, self.self_attention_u)
+                I_latent, J_latent, K_latent = I_latent_ori, J_latent_ori, K_latent_ori
+                if self.use_Nor:
+                    U_latent = F.normalize(U_latent,dim=0)
+                    I_latent = F.normalize(I_latent,dim=0)
+                    J_latent = F.normalize(J_latent,dim=0)
+                    K_latent = F.normalize(K_latent,dim=0)
+
             if self.use_selfatt:
                 topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
                 topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
@@ -408,7 +425,7 @@ class TransMatch(Module):
                     K_latent = F.normalize(K_latent,dim=0)
                 else:
                     U_latent, I_latent, J_latent, K_latent =  U_latent, I_latent, J_latent, K_latent 
-            else:
+            elif not self.use_topk_ij_for_u and not self.use_selfatt:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
             if self.score_type == "mlp":
@@ -424,9 +441,11 @@ class TransMatch(Module):
             elif self.score_type == "transE":
                 J_bias_l = self.transe.i_bias_l(Js)
                 K_bias_l = self.transe.i_bias_l(Ks)
-                
-                R_j = self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
-                R_k = self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
+
+                R_j = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
+                R_k = self.transE_predict(U_latent_ori, I_latent_ori, K_latent_ori, K_bias_l) 
+                R_j += self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
+                R_k += self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
         
             U_visual_ori = self.transe.u_embeddings_v(Us)
             vis_I_ori = self.visual_features[Is]
@@ -435,6 +454,16 @@ class TransMatch(Module):
             I_visual_ori = self.transe.visual_nn_comp(vis_I_ori) #bs, hidden_dim
             J_visual_ori = self.transe.visual_nn_comp(vis_J_ori)
             K_visual_ori = self.transe.visual_nn_comp(vis_K_ori)
+
+            if self.use_topk_ij_for_u:
+                all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
+                U_visual = self._group_topkIJs_for_U_v_(all_item_latent_v, Us, U_visual_ori, self.self_attention_v_u)
+                I_visual, J_visual, K_visual = I_visual_ori, J_visual_ori, K_visual_ori
+                if self.use_Nor:
+                    U_visual = F.normalize(U_visual,dim=0)
+                    I_visual = F.normalize(I_visual,dim=0)
+                    J_visual = F.normalize(J_visual,dim=0)
+                    K_visual = F.normalize(K_visual,dim=0)
 
             if self.use_selfatt:
                 all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
@@ -453,14 +482,17 @@ class TransMatch(Module):
                     K_visual = F.normalize(K_visual,dim=0)
                 else:
                     U_visual, I_visual, J_visual, K_visual = U_visual, I_visual, J_visual, K_visual
-            else:
+            elif not self.use_topk_ij_for_u and not self.use_selfatt:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
                     
             if self.score_type == "mlp":
                 pass
             elif self.score_type == "transE":
-                R_j_v = self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
-                R_k_v = self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
+                R_j_v = self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
+                R_k_v = self.transE_predict(U_visual_ori, I_visual_ori, K_visual_ori, K_bias_v)
+
+                R_j_v += self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
+                R_k_v += self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
                 R_j += R_j_v
                 R_k += R_k_v
 
@@ -606,6 +638,28 @@ class TransMatch(Module):
         aggregated_embeddings = att_model_u(batch_user_embeddings, topk_user_embeddings)
         return aggregated_embeddings
 
+    def _group_topkIJs_for_U_(self, item_embeddings, Us, batch_user_embeddings, att_model_u):
+        topk_Is = self.u_topk_IJs[Us] # bs, 2, top_k_u
+        topk_Is = topk_Is[:, 0, :self.top_k_u] # bs, top_k_u
+        topk_Is_embeddings = item_embeddings(topk_Is) #bs, top_k_u, hd
+        topk_Js = self.u_topk_IJs[Us]
+        topk_Js = topk_Js[:, 1, :self.top_k_u]
+        topk_Js_embeddings = item_embeddings(topk_Js) #bs, top_k_u, hd
+        combined_tensor = torch.cat((topk_Is_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
+        aggregated_embeddings = att_model_u(batch_user_embeddings, combined_tensor)
+        return aggregated_embeddings
+
+    def _group_topkIJs_for_U_v_(self, item_embeddings, Us, batch_user_embeddings, att_model_u):
+        topk_Is = self.u_topk_IJs[Us] # bs, 2, top_k_u
+        topk_Is = topk_Is[:, 0, :self.top_k_u] # bs, top_k_u
+        topk_Is_embeddings = item_embeddings[topk_Is] #bs, top_k_u, hd # torch.Size([1024, 3, 32])
+        topk_Js = self.u_topk_IJs[Us]
+        topk_Js = topk_Js[:, 1, :self.top_k_u]
+        topk_Js_embeddings = item_embeddings[topk_Js] #bs, top_k_u, hd
+        combined_tensor = torch.cat((topk_Is_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
+        aggregated_embeddings = att_model_u(batch_user_embeddings, combined_tensor)
+        return aggregated_embeddings
+
     def inference(self, batch):
         Us = batch[0]
         Is = batch[1]
@@ -627,6 +681,15 @@ class TransMatch(Module):
             I_latent_ori = self.transe.i_embeddings_i(Is)
             J_latent_ori = self.transe.i_embeddings_i(Js)
             K_latent_ori = self.transe.i_embeddings_i(Ks.squeeze(1))
+
+            if self.use_topk_ij_for_u:
+                U_latent = self._group_topkIJs_for_U_(self.transe.i_embeddings_i, Us, U_latent_ori, self.self_attention_u)
+                I_latent, J_latent, K_latent = I_latent_ori, J_latent_ori, K_latent_ori
+                if self.use_Nor:
+                    U_latent = F.normalize(U_latent,dim=0)
+                    I_latent = F.normalize(I_latent,dim=0)
+                    J_latent = F.normalize(J_latent,dim=0)
+                    K_latent = F.normalize(K_latent,dim=0)
             
             if self.use_selfatt:
                 topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
@@ -643,7 +706,7 @@ class TransMatch(Module):
                     I_latent = F.normalize(I_latent,dim=0)
                     J_latent = F.normalize(J_latent,dim=0)
                     K_latent = F.normalize(K_latent,dim=0)
-            else:
+            elif not self.use_topk_ij_for_u and not self.use_selfatt:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
             U_latent = U_latent.unsqueeze(1).expand(-1, j_num, -1)
@@ -668,6 +731,16 @@ class TransMatch(Module):
             J_visual_ori = self.transe.visual_nn_comp(vis_J)
             K_visual_ori = self.transe.visual_nn_comp(vis_K)
 
+            if self.use_topk_ij_for_u:
+                all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
+                U_visual = self._group_topkIJs_for_U_v_(all_item_latent_v, Us, U_visual_ori, self.self_attention_v_u)
+                I_visual, J_visual, K_visual = I_visual_ori, J_visual_ori, K_visual_ori
+                if self.use_Nor:
+                    U_visual = F.normalize(U_visual,dim=0)
+                    I_visual = F.normalize(I_visual,dim=0)
+                    J_visual = F.normalize(J_visual,dim=0)
+                    K_visual = F.normalize(K_visual,dim=0)
+
             if self.use_selfatt:
                 all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
                 topk_users_idxs = self.find_topk_similar_users(U_visual_ori, self.transe.u_embeddings_v.weight.clone().detach(), self.top_k_u)
@@ -683,7 +756,7 @@ class TransMatch(Module):
                     I_visual = F.normalize(I_visual,dim=0)
                     J_visual = F.normalize(J_visual,dim=0)
                     K_visual = F.normalize(K_visual,dim=0)
-            else:
+            elif not self.use_topk_ij_for_u and not self.use_selfatt:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
 
             U_visual = U_visual.unsqueeze(1).expand(-1, j_num, -1)
@@ -692,6 +765,11 @@ class TransMatch(Module):
             
             J_bias_v = self.transe.i_bias_v(J_list)
             self.vis_scores = self.transE_predict(U_visual, I_visual, Js_visual_ii, J_bias_v)
+
+            U_visual_ori = U_visual_ori.unsqueeze(1).expand(-1, j_num, -1)
+            I_visual_ori = I_visual_ori.unsqueeze(1).expand(-1, j_num, -1)
+            J_visual_ii_ori = torch.stack((J_visual_ori, K_visual_ori), dim=1)
+            self.vis_scores += self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ii_ori, J_bias_v)
 
             scores += self.vis_scores
 
@@ -717,7 +795,7 @@ class TransMatch(Module):
                     scores += self.scorer(edge_rep_v).squeeze(-1)
                 elif self.score_type == "transE":
                     J_bias_v = self.transe.i_bias_v(J_list)
-                    self.vis_scores = self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v) 
+                    self.vis_scores += self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v) 
                     scores += self.vis_scores
 
             # else:

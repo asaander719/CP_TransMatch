@@ -68,10 +68,12 @@ def Train_Eval(conf):
         if conf['pretrain_mode']:
             model = TransE(conf, dataset.visual_features.to(conf["device"]))
         else:
-            model = TransMatch(conf, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
+            u_topk_IJs = dataset.u_topk_IJs.to(conf["device"])
+            model = TransMatch(conf, u_topk_IJs, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
-    logger.info(model)
-    logger.info(conf)
+    # logger.info(model)
+    # logger.info(conf)
+    
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
 
     optimizer = Adam([{'params': model.parameters(),'lr': conf["lr"], "weight_decay": conf["wd"]}])
@@ -228,7 +230,32 @@ if __name__ == "__main__":
         Train_Eval(conf)
         print('<<<<<<<< Pre-training End >>>>>>>>')
         conf['pretrain_mode'] = False
-        Train_Eval(conf)
+
+        for s in [0, 1]: 
+            conf['use_selfatt'] = s
+            for k in [3, 5, 1]:
+                conf['top_k_i'] = k
+                conf['top_k_u'] = k
+                for c in [1, 0]:
+                    conf['context'] = c #considering context-enhanced module if 1
+                    for h in [0, 1]:
+                        conf['use_hard_neg'] = h
+
+                        if h == 0:
+                            conf['batch_size'] = 1024
+                            conf['test_batch_size'] =1024
+                        else: 
+                            conf['batch_size'] = 256
+                            conf['test_batch_size'] = 256
+
+                        for N in [0, 1]:
+                            conf['use_Nor'] = N
+                            for t in [1, 0]:
+                                conf["use_topk_ij_for_u"] = t
+                                print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
+                                    conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
+                                    "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
+                                Train_Eval(conf)
 
 
                                

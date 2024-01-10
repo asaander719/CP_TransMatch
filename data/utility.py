@@ -169,6 +169,14 @@ def index_interaction_data(train_data, test_data, val_data, conf):
         print("New data saved!")
     return user_map, item_map, new_train, new_test, new_val, item_cates_ori, cate_items_ori
 
+def get_U_topk_IJs_tensor(u_topk_IJs):
+    tensor_list = []
+    for key, value in u_topk_IJs.items():
+        tensor = torch.tensor(value, dtype=torch.int32)  
+        tensor_list.append(tensor)
+    stacked_tensor = torch.stack(tensor_list)
+    return stacked_tensor
+
 
 def prepare_data(conf):
     print("preparing data ...")
@@ -275,6 +283,9 @@ class Dataset():
                 val_data_L = prepare_wide_evaluate(val_data, conf["neg_num"], self.item_cates, self.cate_items)
                 np.save(dataconf["new_datapath"] + "/test_data_%d.npy"%(conf["neg_num"]), test_data_L)
                 np.save(dataconf["new_datapath"] + "/val_data_%d.npy"%(conf["neg_num"]), val_data_L)
+
+        u_topk_IJs = json.load(open(dataconf["new_datapath"] + dataconf['u_topk_IJs'])) 
+        self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
         
         self.visual_features = torch.cat((visual_features, torch.zeros(1, 2048)),0)
         self.train_items, self.train_users = self.get_train_user_items(train_data)
