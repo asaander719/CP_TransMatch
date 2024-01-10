@@ -1,15 +1,15 @@
 model: "TransMatch"
 wd: 0.00001
 lr: 0.001
-batch_size: 64 #1024
-test_batch_size: 64 #1024 #128
+batch_size: 256 #1024
+test_batch_size: 256 #1024 #128
 evaluation_interval: 2
 max_epoch: 300
 topk: 10
 hidden_dim: 32
 wide_evaluate: 0
 visual_feature_dim: 2048
-patience: 20
+patience: 10
 root_path: /home/asaliao/CP_TransMatch #/CP_TransMatch 
 
 model_path: /model/
@@ -20,10 +20,10 @@ save_results: 1  #save prediction results in evaluation if 1
 save_model: 1  #save the model if 1
 data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
-
-context: 0  #considering context-enhanced module if 1
+use_hard_neg: 1
+context: 1  #considering context-enhanced module if 1
 use_pretrain: 1 # considering pretrained model if 1
-use_Nor: 0  #considering normalization if 1
+use_Nor: 1  #considering normalization if 1
 top_k_u: 5  # topk similar users
 top_k_i: 5  # topk similar items
 path: 0  #considering path-enhanced module if 1
