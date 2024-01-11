@@ -581,6 +581,7 @@ class TransMatch(Module):
     def contrastive_loss_1(self, pos_score, neg_scores, margin):
         positive_loss = torch.mean((pos_score - margin) ** 2)
         negative_loss = torch.mean(F.relu(margin - neg_scores) ** 2, dim=1)
+        # negative_loss = torch.sum(F.relu(margin - neg_scores) ** 2) #not work
         negative_loss = torch.mean(negative_loss)
         total_loss = positive_loss + negative_loss
         return total_loss
@@ -764,16 +765,9 @@ class TransMatch(Module):
             Js_visual_ii = torch.stack((J_visual, K_visual), dim=1)
             
             J_bias_v = self.transe.i_bias_v(J_list)
-            self.vis_scores = self.transE_predict(U_visual, I_visual, Js_visual_ii, J_bias_v)
+            scores += self.transE_predict(U_visual, I_visual, Js_visual_ii, J_bias_v)
+            # scores += self.vis_scores
 
-            U_visual_ori = U_visual_ori.unsqueeze(1).expand(-1, j_num, -1)
-            I_visual_ori = I_visual_ori.unsqueeze(1).expand(-1, j_num, -1)
-            J_visual_ii_ori = torch.stack((J_visual_ori, K_visual_ori), dim=1)
-            self.vis_scores += self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ii_ori, J_bias_v)
-
-            scores += self.vis_scores
-
-            # scores = self.transe.inference(batch)
             if self.use_context:
                 self.entity_pairs = torch.cat([Is_exp.unsqueeze(-1), J_list.unsqueeze(-1)], dim=-1) # bs, j_num, 2
                 edge_list, entity_list, mask_list = self._get_entity_neighbors_and_masks(Us_exp, self.entity_pairs)
@@ -782,10 +776,10 @@ class TransMatch(Module):
                 I_latent_ii = entity_rep[:,:,0,:]
                 Js_latent_ii = entity_rep[:,:,1,:]
                 if self.score_type == "mlp":
-                    scores = self.scorer(edge_rep).squeeze(-1)
+                    scores += self.scorer(edge_rep).squeeze(-1)
                 elif self.score_type == "transE": 
                     J_bias_l = self.transe.i_bias_l(J_list)
-                    scores = self.transE_predict(U_latent, I_latent_ii, Js_latent_ii, J_bias_l)
+                    scores += self.transE_predict(U_latent, I_latent_ii, Js_latent_ii, J_bias_l)
 
                 edge_rep_v, entity_rep_v = self._aggregate_neighbors_test(edge_list, entity_list, mask_list, self.transe.u_embeddings_v, self.visual_features, True)
                 U_visual = edge_rep_v.squeeze(-2)
@@ -795,8 +789,8 @@ class TransMatch(Module):
                     scores += self.scorer(edge_rep_v).squeeze(-1)
                 elif self.score_type == "transE":
                     J_bias_v = self.transe.i_bias_v(J_list)
-                    self.vis_scores += self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v) 
-                    scores += self.vis_scores
+                    scores += self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v) 
+                    # scores += self.vis_scores
 
             # else:
             #     scores = self.transe.inference(batch)
@@ -816,8 +810,8 @@ class TransMatch(Module):
                     jk_path_mask = torch.cat([j_path_mask.unsqueeze(1), k_path_mask], dim=1) # 
                     
                 path_rep = self.get_path_rep(jk_paths, jk_path_mask, U_latent)
-                self.p_scores = self.transE_predict(path_rep, I_latent_ii, Js_latent_ii, J_bias_l)
-                scores += self.p_scores
+                scores += self.transE_predict(path_rep, I_latent_ii, Js_latent_ii, J_bias_l)
+                # scores += self.p_scores
                 
         return scores
    

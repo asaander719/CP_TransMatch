@@ -12,8 +12,8 @@ import os
 import yaml
 
 from data.utility import Dataset
-from trainer.TransMatch import TransMatch
-from trainer.BPR import BPR
+from TransMatch import TransMatch
+# from trainer.BPR import BPR
 from util.eval_utils import *
 import pandas as pd
 from scipy.sparse import csr_matrix

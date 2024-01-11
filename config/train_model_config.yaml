@@ -9,7 +9,7 @@ topk: 10
 hidden_dim: 32
 wide_evaluate: 0
 visual_feature_dim: 2048
-patience: 10
+patience: 20
 root_path: /home/asaliao/CP_TransMatch #/CP_TransMatch 
 
 model_path: /model/
@@ -20,7 +20,7 @@ save_results: 1  #save prediction results in evaluation if 1
 save_model: 1  #save the model if 1
 data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
-use_topk_ij_for_u: 1
+use_topk_ij_for_u: 0
 use_hard_neg: 0
 context: 1 #considering context-enhanced module if 1
 use_pretrain: 1 # considering pretrained model if 1
