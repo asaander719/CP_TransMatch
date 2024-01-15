@@ -285,7 +285,11 @@ class Dataset():
                 np.save(dataconf["new_datapath"] + "/val_data_%d.npy"%(conf["neg_num"]), val_data_L)
 
         u_topk_IJs = json.load(open(dataconf["new_datapath"] + dataconf['u_topk_IJs'])) 
+        i_topk_UJs = json.load(open(dataconf["new_datapath"] + dataconf['i_topk_UJs'])) 
+        j_topk_UIs = json.load(open(dataconf["new_datapath"] + dataconf['j_topk_UIs'])) 
         self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
+        self.i_topk_UJs = get_U_topk_IJs_tensor(i_topk_UJs)
+        self.j_topk_UIs = get_U_topk_IJs_tensor(j_topk_UIs)
         
         self.visual_features = torch.cat((visual_features, torch.zeros(1, 2048)),0)
         self.train_items, self.train_users = self.get_train_user_items(train_data)

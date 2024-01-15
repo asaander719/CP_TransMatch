@@ -62,14 +62,16 @@ def Train_Eval(conf):
     conf["user_num"] = len(dataset.user_map)
     conf["item_num"] = len(dataset.item_map)
     conf["cate_num"] = len(dataset.cate_items)
-    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     print("data prepared, %d users, %d items, %d train, %d test, %d validation data"%(len(dataset.user_map), len(dataset.item_map), len(dataset.traindata), len(dataset.testdata), len(dataset.valdata)))
     if conf["model"] == "TransMatch":
         if conf['pretrain_mode']:
             model = TransE(conf, dataset.visual_features.to(conf["device"]))
         else:
             u_topk_IJs = dataset.u_topk_IJs.to(conf["device"])
-            model = TransMatch(conf, u_topk_IJs, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
+            i_topk_UJs = dataset.i_topk_UJs.to(conf["device"])
+            j_topk_UIs = dataset.j_topk_UIs.to(conf["device"])
+            model = TransMatch(conf, u_topk_IJs, i_topk_UJs, j_topk_UIs, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
     # logger.info(model)
     # logger.info(conf)
@@ -225,15 +227,15 @@ if __name__ == "__main__":
 
     if os.path.exists(pretrain_model_path):
         conf['pretrain_mode'] = False
-        conf['use_Nor'] = 0
+        conf['use_Nor'] = 1
         conf['top_k_i'] = 3
         conf['top_k_u'] = 3
-        conf['use_hard_neg'] = 1
-        conf['context'] = 1
-        conf["use_topk_ij_for_u"] = 0
+        conf['use_hard_neg'] = 0
+        conf['context'] = 0
+        conf["use_topk_ij_for_u"] = 1
         conf['use_selfatt'] = 0
-        conf['batch_size'] = 256
-        conf['test_batch_size'] = 256
+        conf['batch_size'] = 1024
+        conf['test_batch_size'] = 1024
         print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
                                     conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
                                     "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
