@@ -8,6 +8,7 @@ import pdb
 from abc import abstractmethod
 import numpy as np
 from trainer.TransE import TransE
+from trainer.TransR import TransR
 import os
 import pandas as pd
 
@@ -447,10 +448,10 @@ class TransMatch(Module):
                 J_bias_l = self.transe.i_bias_l(Js)
                 K_bias_l = self.transe.i_bias_l(Ks)
 
-                R_j = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
-                R_k = self.transE_predict(U_latent_ori, I_latent_ori, K_latent_ori, K_bias_l) 
-                R_j += self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
-                R_k += self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
+                # R_j = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
+                # R_k = self.transE_predict(U_latent_ori, I_latent_ori, K_latent_ori, K_bias_l) 
+                R_j = self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
+                R_k = self.transE_predict(U_latent, I_latent, K_latent, K_bias_l)             
         
             U_visual_ori = self.transe.u_embeddings_v(Us)
             vis_I_ori = self.visual_features[Is]
@@ -496,11 +497,11 @@ class TransMatch(Module):
             if self.score_type == "mlp":
                 pass
             elif self.score_type == "transE":
-                R_j_v = self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
-                R_k_v = self.transE_predict(U_visual_ori, I_visual_ori, K_visual_ori, K_bias_v)
+                # R_j_v = self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
+                # R_k_v = self.transE_predict(U_visual_ori, I_visual_ori, K_visual_ori, K_bias_v)
 
-                R_j_v += self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
-                R_k_v += self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
+                R_j_v = self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
+                R_k_v = self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
                 R_j += R_j_v
                 R_k += R_k_v
 
@@ -714,7 +715,7 @@ class TransMatch(Module):
             scores = self.transe.inference(batch)
 
         else:
-            scores = self.transe.inference(batch)
+            # scores = self.transe.inference(batch)
             # if self.use_pretrain:
             U_latent_ori = self.transe.u_embeddings_l(Us)                 
             I_latent_ori = self.transe.i_embeddings_i(Is)
@@ -763,7 +764,7 @@ class TransMatch(Module):
             elif self.score_type == "transE": 
                 J_bias_l = self.transe.i_bias_l(J_list)
                 # print(U_latent.size(), I_latent.size(), Js_latent_ii.size(), J_bias_l.size())
-                scores += self.transE_predict(U_latent, I_latent, Js_latent_ii, J_bias_l) 
+                scores = self.transE_predict(U_latent, I_latent, Js_latent_ii, J_bias_l) 
         
             U_visual_ori = self.transe.u_embeddings_v(Us)
             vis_I = self.visual_features[Is]
