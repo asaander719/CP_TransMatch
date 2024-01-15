@@ -169,8 +169,8 @@ class TransMatch(Module):
             self.use_pretrain = False
             self.pretrain_mode = True
 
-        self.all_bottoms_id = self._get_all_bottoms_id()
-        self.margin = nn.Parameter(torch.tensor(1.0))
+        # self.all_bottoms_id = self._get_all_bottoms_id()
+        self.margin = nn.Parameter(torch.tensor(0.7))
         self.temp = nn.Parameter(torch.tensor(0.07))
 
         if self.pretrain_mode:
@@ -198,16 +198,16 @@ class TransMatch(Module):
             self.path_weight = conf["path_weight"]
             self.path_agg = conf["path_agg"]
 
-    def _get_all_bottoms_id(self):
-        train_df = pd.read_csv("data/iqon_s/train.csv", header=None).astype('int')
-        train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
-        test_df = pd.read_csv("data/iqon_s/test.csv", header=None).astype('int')
-        test_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
-        valid_df = pd.read_csv("data/iqon_s/val.csv", header=None).astype('int')
-        valid_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
-        all_bottoms_id = pd.concat([train_df["pos_bottom_idx"], test_df["pos_bottom_idx"], valid_df["pos_bottom_idx"],
-            train_df["neg_bottom_idx"], test_df["neg_bottom_idx"], valid_df["neg_bottom_idx"]], ignore_index=True).unique()
-        return torch.LongTensor(all_bottoms_id).to(self.device)
+    # def _get_all_bottoms_id(self):
+    #     train_df = pd.read_csv("data/iqon_s/train.csv", header=None).astype('int')
+    #     train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+    #     test_df = pd.read_csv("data/iqon_s/test.csv", header=None).astype('int')
+    #     test_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+    #     valid_df = pd.read_csv("data/iqon_s/val.csv", header=None).astype('int')
+    #     valid_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+    #     all_bottoms_id = pd.concat([train_df["pos_bottom_idx"], test_df["pos_bottom_idx"], valid_df["pos_bottom_idx"],
+    #         train_df["neg_bottom_idx"], test_df["neg_bottom_idx"], valid_df["neg_bottom_idx"]], ignore_index=True).unique()
+    #     return torch.LongTensor(all_bottoms_id).to(self.device)
 
     def find_topk_js_for_ui(self, U_latent, I_latent, J_bias, J_latent, all_embs):
         # all_bottoms_embs = self.transe.i_embeddings_i(self.all_bottoms_id)
@@ -408,24 +408,25 @@ class TransMatch(Module):
                     J_latent = F.normalize(J_latent,dim=0)
                     K_latent = F.normalize(K_latent,dim=0)
 
-            if self.use_selfatt:
-                topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
-                topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Js_idxs = self.find_topk_similar_users(J_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Ks_idxs = self.find_topk_similar_users(K_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            # if self.use_selfatt:
+            #     topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
+            #     topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            #     topk_Js_idxs = self.find_topk_similar_users(J_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            #     topk_Ks_idxs = self.find_topk_similar_users(K_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
         
-                U_latent  = self.aggregate_item_embeddings(self.transe.u_embeddings_l, topk_users_idxs, U_latent_ori, self.self_attention_u)     
-                I_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Is_idxs, I_latent_ori, self.self_attention_v)
-                J_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Js_idxs, J_latent_ori, self.self_attention_v)
-                K_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Ks_idxs, K_latent_ori, self.self_attention_v)
-                if self.use_Nor:
-                    U_latent = F.normalize(U_latent,dim=0)
-                    I_latent = F.normalize(I_latent,dim=0)
-                    J_latent = F.normalize(J_latent,dim=0)
-                    K_latent = F.normalize(K_latent,dim=0)
-                else:
-                    U_latent, I_latent, J_latent, K_latent =  U_latent, I_latent, J_latent, K_latent 
-            elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            #     U_latent  = self.aggregate_item_embeddings(self.transe.u_embeddings_l, topk_users_idxs, U_latent_ori, self.self_attention_u)     
+            #     I_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Is_idxs, I_latent_ori, self.self_attention_v)
+            #     J_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Js_idxs, J_latent_ori, self.self_attention_v)
+            #     K_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Ks_idxs, K_latent_ori, self.self_attention_v)
+            #     if self.use_Nor:
+            #         U_latent = F.normalize(U_latent,dim=0)
+            #         I_latent = F.normalize(I_latent,dim=0)
+            #         J_latent = F.normalize(J_latent,dim=0)
+            #         K_latent = F.normalize(K_latent,dim=0)
+            #     else:
+            #         U_latent, I_latent, J_latent, K_latent =  U_latent, I_latent, J_latent, K_latent 
+            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            else:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
             if self.score_type == "mlp":
@@ -465,24 +466,25 @@ class TransMatch(Module):
                     J_visual = F.normalize(J_visual,dim=0)
                     K_visual = F.normalize(K_visual,dim=0)
 
-            if self.use_selfatt:
-                all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
-                topk_users_idxs = self.find_topk_similar_users(U_visual_ori, self.transe.u_embeddings_v.weight.clone().detach(), self.top_k_u)
-                topk_Is_idxs = self.find_topk_similar_users(I_visual_ori, all_item_latent_v, self.top_k_i)
-                topk_Js_idxs = self.find_topk_similar_users(J_visual_ori, all_item_latent_v, self.top_k_i)
-                topk_Ks_idxs = self.find_topk_similar_users(K_visual_ori, all_item_latent_v, self.top_k_i)
-                U_visual = self.aggregate_item_embeddings(self.transe.u_embeddings_v, topk_users_idxs, U_visual_ori, self.self_attention_v_u)    
-                I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual_ori, self.self_attention_v)
-                J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual_ori, self.self_attention_v)
-                K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual_ori, self.self_attention_v)
-                if self.use_Nor:
-                    U_visual = F.normalize(U_visual,dim=0)
-                    I_visual = F.normalize(I_visual,dim=0)
-                    J_visual = F.normalize(J_visual,dim=0)
-                    K_visual = F.normalize(K_visual,dim=0)
-                else:
-                    U_visual, I_visual, J_visual, K_visual = U_visual, I_visual, J_visual, K_visual
-            elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # if self.use_selfatt:
+            #     all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
+            #     topk_users_idxs = self.find_topk_similar_users(U_visual_ori, self.transe.u_embeddings_v.weight.clone().detach(), self.top_k_u)
+            #     topk_Is_idxs = self.find_topk_similar_users(I_visual_ori, all_item_latent_v, self.top_k_i)
+            #     topk_Js_idxs = self.find_topk_similar_users(J_visual_ori, all_item_latent_v, self.top_k_i)
+            #     topk_Ks_idxs = self.find_topk_similar_users(K_visual_ori, all_item_latent_v, self.top_k_i)
+            #     U_visual = self.aggregate_item_embeddings(self.transe.u_embeddings_v, topk_users_idxs, U_visual_ori, self.self_attention_v_u)    
+            #     I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual_ori, self.self_attention_v)
+            #     J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual_ori, self.self_attention_v)
+            #     K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual_ori, self.self_attention_v)
+            #     if self.use_Nor:
+            #         U_visual = F.normalize(U_visual,dim=0)
+            #         I_visual = F.normalize(I_visual,dim=0)
+            #         J_visual = F.normalize(J_visual,dim=0)
+            #         K_visual = F.normalize(K_visual,dim=0)
+            #     else:
+            #         U_visual, I_visual, J_visual, K_visual = U_visual, I_visual, J_visual, K_visual
+            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            else:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
                     
             if self.score_type == "mlp":
@@ -692,22 +694,23 @@ class TransMatch(Module):
                     J_latent = F.normalize(J_latent,dim=0)
                     K_latent = F.normalize(K_latent,dim=0)
             
-            if self.use_selfatt:
-                topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
-                topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Js_idxs = self.find_topk_similar_users(J_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
-                topk_Ks_idxs = self.find_topk_similar_users(K_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            # if self.use_selfatt:
+            #     topk_users_idxs = self.find_topk_similar_users(U_latent_ori, self.transe.u_embeddings_l.weight.clone().detach(), self.top_k_u)
+            #     topk_Is_idxs = self.find_topk_similar_users(I_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            #     topk_Js_idxs = self.find_topk_similar_users(J_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
+            #     topk_Ks_idxs = self.find_topk_similar_users(K_latent_ori, self.transe.i_embeddings_i.weight.clone().detach(), self.top_k_i)
         
-                U_latent = self.aggregate_item_embeddings(self.transe.u_embeddings_l, topk_users_idxs, U_latent_ori, self.self_attention_u)    
-                I_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Is_idxs, I_latent_ori, self.self_attention)
-                J_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Js_idxs, J_latent_ori, self.self_attention)
-                K_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Ks_idxs, K_latent_ori, self.self_attention)
-                if self.use_Nor:
-                    U_latent = F.normalize(U_latent,dim=0)
-                    I_latent = F.normalize(I_latent,dim=0)
-                    J_latent = F.normalize(J_latent,dim=0)
-                    K_latent = F.normalize(K_latent,dim=0)
-            elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            #     U_latent = self.aggregate_item_embeddings(self.transe.u_embeddings_l, topk_users_idxs, U_latent_ori, self.self_attention_u)    
+            #     I_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Is_idxs, I_latent_ori, self.self_attention)
+            #     J_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Js_idxs, J_latent_ori, self.self_attention)
+            #     K_latent = self.aggregate_item_embeddings(self.transe.i_embeddings_i, topk_Ks_idxs, K_latent_ori, self.self_attention)
+            #     if self.use_Nor:
+            #         U_latent = F.normalize(U_latent,dim=0)
+            #         I_latent = F.normalize(I_latent,dim=0)
+            #         J_latent = F.normalize(J_latent,dim=0)
+            #         K_latent = F.normalize(K_latent,dim=0)
+            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            else:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
             U_latent = U_latent.unsqueeze(1).expand(-1, j_num, -1)
@@ -742,22 +745,23 @@ class TransMatch(Module):
                     J_visual = F.normalize(J_visual,dim=0)
                     K_visual = F.normalize(K_visual,dim=0)
 
-            if self.use_selfatt:
-                all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
-                topk_users_idxs = self.find_topk_similar_users(U_visual_ori, self.transe.u_embeddings_v.weight.clone().detach(), self.top_k_u)
-                topk_Is_idxs = self.find_topk_similar_users(I_visual_ori, all_item_latent_v, self.top_k_i)
-                topk_Js_idxs = self.find_topk_similar_users(J_visual_ori, all_item_latent_v, self.top_k_i)
-                topk_Ks_idxs = self.find_topk_similar_users(K_visual_ori, all_item_latent_v, self.top_k_i)
-                U_visual = self.aggregate_item_embeddings(self.transe.u_embeddings_v, topk_users_idxs, U_visual_ori, self.self_attention_v_u)    
-                I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual_ori, self.self_attention_v)
-                J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual_ori, self.self_attention_v)
-                K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual_ori, self.self_attention_v)
-                if self.use_Nor:
-                    U_visual = F.normalize(U_visual,dim=0)
-                    I_visual = F.normalize(I_visual,dim=0)
-                    J_visual = F.normalize(J_visual,dim=0)
-                    K_visual = F.normalize(K_visual,dim=0)
-            elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # if self.use_selfatt:
+            #     all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
+            #     topk_users_idxs = self.find_topk_similar_users(U_visual_ori, self.transe.u_embeddings_v.weight.clone().detach(), self.top_k_u)
+            #     topk_Is_idxs = self.find_topk_similar_users(I_visual_ori, all_item_latent_v, self.top_k_i)
+            #     topk_Js_idxs = self.find_topk_similar_users(J_visual_ori, all_item_latent_v, self.top_k_i)
+            #     topk_Ks_idxs = self.find_topk_similar_users(K_visual_ori, all_item_latent_v, self.top_k_i)
+            #     U_visual = self.aggregate_item_embeddings(self.transe.u_embeddings_v, topk_users_idxs, U_visual_ori, self.self_attention_v_u)    
+            #     I_visual = self.aggregate_embeddings(all_item_latent_v, topk_Is_idxs, I_visual_ori, self.self_attention_v)
+            #     J_visual = self.aggregate_embeddings(all_item_latent_v, topk_Js_idxs, J_visual_ori, self.self_attention_v)
+            #     K_visual = self.aggregate_embeddings(all_item_latent_v, topk_Ks_idxs, K_visual_ori, self.self_attention_v)
+            #     if self.use_Nor:
+            #         U_visual = F.normalize(U_visual,dim=0)
+            #         I_visual = F.normalize(I_visual,dim=0)
+            #         J_visual = F.normalize(J_visual,dim=0)
+            #         K_visual = F.normalize(K_visual,dim=0)
+            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            else:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
 
             U_visual = U_visual.unsqueeze(1).expand(-1, j_num, -1)

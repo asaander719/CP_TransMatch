@@ -225,7 +225,7 @@ if __name__ == "__main__":
 
     if os.path.exists(pretrain_model_path):
         conf['pretrain_mode'] = False
-        conf['use_Nor'] = 1
+        conf['use_Nor'] = 0
         conf['top_k_i'] = 3
         conf['top_k_u'] = 3
         conf['use_hard_neg'] = 1
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         #         for k in [3, 5, 1]:
         #             conf['top_k_i'] = k
         #             conf['top_k_u'] = k
-        #             for h in [1, 0]:
+        #             for h in [0, 1]:
         #                 conf['use_hard_neg'] = h
         #                 if h == 0:
         #                     conf['batch_size'] = 1024
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         #                 for c in [1, 0]:
         #                     conf['context'] = c #considering context-enhanced module if 1
                         
-        #                     for t in [1, 0]:
+        #                     for t in [0]:
         #                         conf["use_topk_ij_for_u"] = t
         #                         print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
         #                             conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
