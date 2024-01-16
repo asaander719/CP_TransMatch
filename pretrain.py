@@ -16,6 +16,7 @@ import yaml
 from data.utility import Dataset
 from trainer.TransMatch_pretrain import TransMatch
 from trainer.TransE import TransE
+from trainer.TransR import TransR
 from util.eval_utils import *
 import pandas as pd
 
@@ -66,7 +67,11 @@ def Train_Eval(conf):
     print("data prepared, %d users, %d items, %d train, %d test, %d validation data"%(len(dataset.user_map), len(dataset.item_map), len(dataset.traindata), len(dataset.testdata), len(dataset.valdata)))
     if conf["model"] == "TransMatch":
         if conf['pretrain_mode']:
-            model = TransE(conf, dataset.visual_features.to(conf["device"]))
+            if conf['pretrained_model'] == "TransR":
+                model = TransR(conf, dataset.visual_features.to(conf["device"]))
+            elif conf['pretrained_model'] == "TransE":
+                model = TransE(conf, dataset.visual_features.to(conf["device"]))
+
         else:
             u_topk_IJs = dataset.u_topk_IJs.to(conf["device"])
             i_topk_UJs = dataset.i_topk_UJs.to(conf["device"])
@@ -217,7 +222,7 @@ if __name__ == "__main__":
     conf["performance_path"] += (conf["dataset"] + "/")
     conf["result_path"] += (conf["dataset"] + "/")
     conf["model_path"] += (conf["dataset"] + "/")
-    conf['pretrained_model'] = "TransE"
+    conf['pretrained_model'] = "TransE" # OR "TransR"
 
     pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
     pretrain_model_dir = "model/iqon_s/pretrained_model/"

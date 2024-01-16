@@ -50,12 +50,15 @@ class TransR(Module):
         self.userEmb = F.normalize(torch.normal(mean=torch.zeros(self.user_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim), std=1/(self.hidden_dim)**0.5), p=2, dim=-1)
         self.itemB = torch.zeros([self.item_num + 1, 1])
+
+        # self.relationEmb = F.normalize(torch.normal(mean=torch.zeros(self.item_num + 1, self.hidden_dim* self.hidden_dim), std=1/(self.hidden_dim* self.hidden_dim)**0.5), p=2, dim=-1)
         
         self.u_embeddings_l = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
         self.i_bias_l = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
         self.i_embeddings_i = nn.Embedding.from_pretrained(self.itemEmb, freeze=False, padding_idx=self.item_num)
+        # self.projection_matrix = nn.Embedding.from_pretrained(self.relationEmb, freeze=False, padding_idx=self.user_num) #(num_relations, relation_dim * embedding_dim)
         self.projection_matrix = nn.Embedding(self.user_num + 1, self.hidden_dim * self.hidden_dim) #(num_relations, relation_dim * embedding_dim)
-
+        nn.init.xavier_uniform_(self.projection_matrix.weight.data)
         if self.score_type == "mlp":
             self.layer = nn.Linear(self.hidden_dim * 3, self.hidden_dim)
             self.scorer = nn.Linear(self.hidden_dim, 1)   
@@ -74,7 +77,9 @@ class TransR(Module):
         self.visual_nn_per[0].apply(lambda module: uniform_(module.bias.data,0,0.001))
         self.i_bias_v = nn.Embedding.from_pretrained(self.itemB, freeze=False, padding_idx=self.item_num)
         self.u_embeddings_v = nn.Embedding.from_pretrained(self.userEmb, freeze=False, padding_idx=self.user_num)
+        # self.projection_matrix_v = nn.Embedding.from_pretrained(self.relationEmb, freeze=False, padding_idx=self.user_num)
         self.projection_matrix_v = nn.Embedding(self.user_num + 1, self.hidden_dim * self.hidden_dim) 
+        nn.init.xavier_uniform_(self.projection_matrix_v.weight.data)
 
         # self.T = nn.Parameter(torch.zeros(self.hidden_dim))
         # experiments shows that T (TransRec) dosen't helpful 
@@ -119,11 +124,11 @@ class TransR(Module):
             R_k = self.scorer(edge_neg_rep).squeeze(-1)
             
         elif self.score_type == "transE":
-            projection_matrix = self.projection_matrix(Us)
+            projection_matrix = self.projection_matrix(Us).view(Us.size(0), self.hidden_dim, self.hidden_dim).transpose(1,2)
 
-            I_latent = torch.matmul(I_latent, projection_matrix.view(-1, self.hidden_dim, self.hidden_dim).transpose(1, 2))
-            J_latent = torch.matmul(J_latent, projection_matrix.view(-1, self.hidden_dim, self.hidden_dim).transpose(1, 2))
-            K_latent = torch.matmul(K_latent, projection_matrix.view(-1, self.hidden_dim, self.hidden_dim).transpose(1, 2))
+            I_latent = torch.matmul(I_latent.unsqueeze(1), projection_matrix).squeeze(1)
+            J_latent = torch.matmul(J_latent.unsqueeze(1), projection_matrix).squeeze(1)
+            K_latent = torch.matmul(K_latent.unsqueeze(1), projection_matrix).squeeze(1)
 
             J_bias_l = self.i_bias_l(Js)
             K_bias_l = self.i_bias_l(Ks)
@@ -143,6 +148,12 @@ class TransR(Module):
         if self.score_type == "mlp":
             pass
         elif self.score_type == "transE":
+            projection_matrix_v = self.projection_matrix_v(Us).view(Us.size(0), self.hidden_dim, self.hidden_dim).transpose(1,2)
+
+            I_visual = torch.matmul(I_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
+            J_visual = torch.matmul(J_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
+            K_visual = torch.matmul(K_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
+
             R_j_v = self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
             R_k_v = self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
             
@@ -164,14 +175,14 @@ class TransR(Module):
         Ks = batch[3]
         J_list = torch.cat([Js.unsqueeze(1), Ks], dim=-1)
         j_num = J_list.size(1)
-        Us = Us.unsqueeze(1).expand(-1, j_num) #bs, j_num
-        Is = Is.unsqueeze(1).expand(-1, j_num)
+        Us_exp = Us.unsqueeze(1).expand(-1, j_num) #bs, j_num
+        Is_exp= Is.unsqueeze(1).expand(-1, j_num)
         J_bias_l = self.i_bias_l(J_list)
-        U_latent = self.u_embeddings_l(Us) 
+        U_latent = self.u_embeddings_l(Us_exp) 
             # T = self.T.expand_as(U_latent)  # [B H]
             # U_latent = U_latent + T 
 
-        I_latent_ii = self.i_embeddings_i(Is)
+        I_latent_ii = self.i_embeddings_i(Is_exp) #[bs, 2, hd]
         Js_latent_ii = self.i_embeddings_i(J_list) 
         if self.score_type == "mlp":
             edge_rep = torch.cat([U_latent, I_latent_ii, Js_latent_ii], dim=-1)
@@ -179,18 +190,19 @@ class TransR(Module):
             edge_rep = F.relu(edge_rep)
             scores = self.scorer(edge_rep).squeeze(-1)
         elif self.score_type == "transE": 
-            projection_matrix = self.projection_matrix(Us)
-
-            I_latent_ii = torch.matmul(I_latent_ii, projection_matrix.view(-1, self.hidden_dim, self.hidden_dim).transpose(1, 2))
-            Js_latent_ii = torch.matmul(Js_latent_ii, projection_matrix.view(-1, self.hidden_dim, self.hidden_dim).transpose(1, 2))
+            projection_matrix = self.projection_matrix(Us_exp).view(Us_exp.size(0), Us_exp.size(1), self.hidden_dim, self.hidden_dim).transpose(2,3) 
+            #torch.Size([bs, 2, hd*hd]) -> torch.Size([bs, 2, hd, hd]) 
+           
+            I_latent_ii = torch.matmul(I_latent_ii.unsqueeze(2), projection_matrix).squeeze(2)#torch.Size([1024, 2, 32]) torch.Size([1024, 2, 32, 32])
+            Js_latent_ii = torch.matmul(Js_latent_ii.unsqueeze(2), projection_matrix).squeeze(2)
 
             J_bias_l = self.i_bias_l(J_list)
             scores = self.transE_predict(U_latent, I_latent_ii, Js_latent_ii, J_bias_l)
        
         J_bias_v = self.i_bias_v(J_list)
 
-        U_visual = self.u_embeddings_v(Us)
-        vis_I = self.visual_features[Is]
+        U_visual = self.u_embeddings_v(Us_exp)
+        vis_I = self.visual_features[Is_exp]
         vis_Js = self.visual_features[J_list]
         I_visual_ii = self.visual_nn_comp(vis_I) #bs, hidden_dim
         Js_visual_ii = self.visual_nn_comp(vis_Js)#bs, j_num, hidden_dim
@@ -198,6 +210,12 @@ class TransR(Module):
         if self.score_type == "mlp":
             scores = self.scorer(edge_rep_v).squeeze(-1)
         elif self.score_type == "transE":
+            projection_matrix_v = self.projection_matrix_v(Us_exp).view(Us_exp.size(0), Us_exp.size(1), self.hidden_dim, self.hidden_dim).transpose(2,3) 
+            #torch.Size([bs, 2, hd*hd]) -> torch.Size([bs, 2, hd, hd])
+
+            I_visual_ii = torch.matmul(I_visual_ii.unsqueeze(2), projection_matrix_v).squeeze(2)
+            Js_visual_ii = torch.matmul(Js_visual_ii.unsqueeze(2), projection_matrix_v).squeeze(2)
+
             J_bias_l = self.i_bias_l(J_list)
             self.vis_scores = self.transE_predict(U_visual, I_visual_ii, Js_visual_ii, J_bias_v)
 

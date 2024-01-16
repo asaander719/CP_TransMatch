@@ -154,6 +154,7 @@ class TransMatch(Module):
         self.top_k_i = conf["top_k_i"]
         self.self_attention = Attention(self.hidden_dim)
         self.self_attention_v = Attention(self.hidden_dim)
+        self.pretrained_model = conf['pretrained_model'] 
 
         self.self_attention_u = Attention(self.hidden_dim)
         self.self_attention_v_u = Attention(self.hidden_dim)
@@ -167,8 +168,12 @@ class TransMatch(Module):
             print("Continuing training with existing model...")
             self.use_pretrain = True
             self.pretrain_mode = False
+
         else:
-            self.transe = TransE(conf, visual_features=self.visual_features)
+            if self.pretrained_model == "TransR":
+                self.transe = TransR(conf, visual_features=self.visual_features)
+            elif self.pretrained_model == "TransE":
+                self.transe = TransE(conf, visual_features=self.visual_features)
             self.use_pretrain = False
             self.pretrain_mode = True
 
@@ -448,6 +453,12 @@ class TransMatch(Module):
                 J_bias_l = self.transe.i_bias_l(Js)
                 K_bias_l = self.transe.i_bias_l(Ks)
 
+                if self.pretrained_model == "transR":
+                    projection_matrix = self.transe.projection_matrix(Us).view(Us.size(0), self.hidden_dim, self.hidden_dim).transpose(1,2)
+                    I_latent = torch.matmul(I_latent.unsqueeze(1), projection_matrix).squeeze(1) 
+                    J_latent = torch.matmul(J_latent.unsqueeze(1), projection_matrix).squeeze(1) 
+                    K_latent = torch.matmul(K_latent.unsqueeze(1), projection_matrix).squeeze(1) 
+
                 # R_j = self.transE_predict(U_latent_ori, I_latent_ori, J_latent_ori, J_bias_l)
                 # R_k = self.transE_predict(U_latent_ori, I_latent_ori, K_latent_ori, K_bias_l) 
                 R_j = self.transE_predict(U_latent, I_latent, J_latent, J_bias_l)
@@ -499,6 +510,12 @@ class TransMatch(Module):
             elif self.score_type == "transE":
                 # R_j_v = self.transE_predict(U_visual_ori, I_visual_ori, J_visual_ori, J_bias_v)
                 # R_k_v = self.transE_predict(U_visual_ori, I_visual_ori, K_visual_ori, K_bias_v)
+                if self.pretrained_model == "transR":
+                    projection_matrix_v = self.transe.projection_matrix_v(Us).view(Us.size(0), self.hidden_dim, self.hidden_dim).transpose(1,2)
+
+                    I_visual = torch.matmul(I_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
+                    J_visual = torch.matmul(J_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
+                    K_visual = torch.matmul(K_visual.unsqueeze(1), projection_matrix_v).squeeze(1)
 
                 R_j_v = self.transE_predict(U_visual, I_visual, J_visual, J_bias_v)
                 R_k_v = self.transE_predict(U_visual, I_visual, K_visual, K_bias_v)
@@ -762,6 +779,11 @@ class TransMatch(Module):
                 edge_rep = F.relu(edge_rep)
                 scores += self.scorer(edge_rep).squeeze(-1)
             elif self.score_type == "transE": 
+                if self.pretrained_model == "transR":
+                    projection_matrix = self.transe.projection_matrix(Us_exp).view(Us_exp.size(0), Us_exp.size(1), self.hidden_dim, self.hidden_dim).transpose(2,3) 
+                    I_latent = torch.matmul(I_latent.unsqueeze(2), projection_matrix).squeeze(2)
+                    Js_latent_ii = torch.matmul(Js_latent_ii.unsqueeze(2), projection_matrix).squeeze(2)
+
                 J_bias_l = self.transe.i_bias_l(J_list)
                 # print(U_latent.size(), I_latent.size(), Js_latent_ii.size(), J_bias_l.size())
                 scores = self.transE_predict(U_latent, I_latent, Js_latent_ii, J_bias_l) 
@@ -808,6 +830,11 @@ class TransMatch(Module):
             U_visual = U_visual.unsqueeze(1).expand(-1, j_num, -1)
             I_visual = I_visual.unsqueeze(1).expand(-1, j_num, -1)
             Js_visual_ii = torch.stack((J_visual, K_visual), dim=1)
+
+            if self.pretrained_model == "transR": 
+                projection_matrix_v = self.transe.projection_matrix_v(Us_exp).view(Us_exp.size(0), Us_exp.size(1), self.hidden_dim, self.hidden_dim).transpose(2,3) 
+                I_visual = torch.matmul(I_visual.unsqueeze(2), projection_matrix_v).squeeze(2)
+                Js_visual_ii = torch.matmul(Js_visual_ii.unsqueeze(2), projection_matrix_v).squeeze(2)
             
             J_bias_v = self.transe.i_bias_v(J_list)
             scores += self.transE_predict(U_visual, I_visual, Js_visual_ii, J_bias_v)
