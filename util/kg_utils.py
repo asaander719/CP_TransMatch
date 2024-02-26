@@ -26,7 +26,28 @@ def build_kg(train_data):
         
     return entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set
 
-
+def build_kg_topk(fake_triplets):
+    # train_data[t] = u, i, j (r, h, t)
+    edge2entities = []
+    edge2relation = []
+    e2re = defaultdict(set)
+    entity2edge_set = defaultdict(set) 
+    relation2entity_set = {}
+    
+    for edge_idx, triplet in enumerate(fake_triplets):
+        relation_id, head_id, tail_id = triplet
+        entity2edge_set[head_id].add(edge_idx)
+        entity2edge_set[tail_id].add(edge_idx)
+        edge2entities.append([head_id, tail_id])             #[[1, 2], [3, 4], [5, 6]]
+        edge2relation.append(relation_id)                    # [1, 2, 3, 4]
+        if relation_id not in relation2entity_set:
+            relation2entity_set[relation_id] = []
+        relation2entity_set[relation_id].append(head_id)
+        relation2entity_set[relation_id].append(tail_id)
+        e2re[head_id].add((relation_id, tail_id))
+        e2re[tail_id].add((relation_id, head_id))  
+        
+    return entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set
     
 def shuffle_gragh(entity2edges, entity2edge_set, neighbor_samples): #To sample edges for each entity
     curr_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -72,7 +93,15 @@ def get_h2t(train_triplets, test_triplets, val_triplets):
 #         head2tails[tail].add(head)
     return head2tails  
     
-    
+def get_h2t(fake_triplets, test_triplets, val_triplets):
+    head2tails = defaultdict(set)
+    for relation, head, tail in fake_triplets:
+        head2tails[head].add(tail) 
+    for relation, head, tail, _ in test_triplets + val_triplets:
+        head2tails[head].add(tail)
+#         head2tails[tail].add(head)
+    return head2tails  
+        
 def count_all_paths(inputs):
     e2re, max_path_len, head2tails, item_cate, pid = inputs
     ht2paths = {}

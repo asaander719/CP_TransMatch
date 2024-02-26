@@ -21,6 +21,7 @@ import pandas as pd
 from datetime import datetime
 import shutil
 import yaml
+from pretrain import *
 
 from data.utility import Dataset
 # from trainer.TransMatch_pretrain import TransMatch
@@ -129,11 +130,6 @@ def _get_UJs_for_I_(conf, dataset, model, train_uj_pairs):
         topk_scores, topk_indices = torch.topk(distances.view(-1), k=5, dim=-1) #k=conf['top_k_i']
         topk_u_j_pairs = uj_pairs[topk_indices]
         new_i_uj_dict[int(I_idx)] = topk_u_j_pairs.cpu().numpy().tolist()
-        if a < 1:
-            print(new_i_uj_dict)
-            a+= 1
-        else:
-            continue
     with open('data/iqon_s/I_topk_UJs_dict.json', 'w') as json_file:
         json.dump(new_i_uj_dict, json_file)
 
@@ -206,7 +202,7 @@ def main():
     conf["item_num"] = len(dataset.item_map)
     conf["cate_num"] = len(dataset.cate_items)
     os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-    conf['pretrained_model'] = 'TransR' # 'TransE'
+    conf['pretrained_model'] = 'TransE' # 'TransE'
     pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
     pretrain_model_dir = "model/iqon_s/pretrained_model/"
     pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
@@ -217,7 +213,17 @@ def main():
         conf['use_pretrain'] = True
         model.to(conf["device"])
         logger.info(model)
-
+    else:
+        conf['pretrain_mode'] = True
+        print('<<<<<<<< Start Pre-training >>>>>>>>')
+        Train_Eval(conf)
+        print('<<<<<<<< Pre-training End >>>>>>>>')
+        conf['pretrain_mode'] = False
+        model = torch.load(pretrain_model_path)
+        print("Testing with existing model...")
+        conf['use_pretrain'] = True
+        model.to(conf["device"])
+        logger.info(model)
     train_df = pd.read_csv("data/iqon_s/train.csv", header=None).astype('int')
     train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
     test_df = pd.read_csv("data/iqon_s/test.csv", header=None).astype('int')
@@ -233,8 +239,8 @@ def main():
 
     dataset.visual_features = dataset.visual_features.to(conf['device'])
     new_u_ij_dict, new_u_Is_Js_dict = _get_IJs_for_U_(conf, dataset, model, train_ij_pairs)
-
-
+    new_i_uj_dict, new_i_Us_Js_dict = _get_UJs_for_I_(conf, dataset, model, train_uj_pairs)
+    new_j_ui_dict, new_j_Us_Is_dict = _get_UIs_for_J_(conf, dataset, model, train_ui_pairs) 
 
 if __name__ == '__main__':
     main()

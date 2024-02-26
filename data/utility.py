@@ -177,6 +177,33 @@ def get_U_topk_IJs_tensor(u_topk_IJs):
     stacked_tensor = torch.stack(tensor_list)
     return stacked_tensor
 
+def get_fake_triplets(path, topk_u, topk_i, u_ijs, i_ujs, j_uis):
+    fake_triplets = []
+    for key, values in u_ijs.items():
+        for i in range(topk_u):     
+            triplet = [int(key)] + [value[i] for value in values]  # u, i, j
+            fake_triplets.append(tuple(triplet))
+
+    # for key, value in i_ujs.items():
+    #     for i in range(topk_i):
+    #         triplet = tuple([value[0][i], int(key), value[1][i]])  # u, i, j
+    #         fake_triplets.append(triplet)
+
+    # for key, value in j_uis.items():
+    #     for i in range(topk_i):
+    #         triplet = tuple([value[0][i], value[1][i], int(key)])  # u, i, j
+    #         fake_triplets.append(triplet)
+
+    # Remove duplicates
+    unique_fake_triplets = []
+    with open(path, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+
+        for triplet in fake_triplets:
+            if triplet not in unique_fake_triplets:
+                unique_fake_triplets.append(triplet)
+                csv_writer.writerow(triplet)
+    return unique_fake_triplets
 
 def prepare_data(conf):
     print("preparing data ...")
@@ -284,12 +311,16 @@ class Dataset():
                 np.save(dataconf["new_datapath"] + "/test_data_%d.npy"%(conf["neg_num"]), test_data_L)
                 np.save(dataconf["new_datapath"] + "/val_data_%d.npy"%(conf["neg_num"]), val_data_L)
 
-        u_topk_IJs = json.load(open(dataconf["new_datapath"] + dataconf['u_topk_IJs'])) 
-        i_topk_UJs = json.load(open(dataconf["new_datapath"] + dataconf['i_topk_UJs'])) 
-        j_topk_UIs = json.load(open(dataconf["new_datapath"] + dataconf['j_topk_UIs'])) 
-        self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
-        self.i_topk_UJs = get_U_topk_IJs_tensor(i_topk_UJs)
-        self.j_topk_UIs = get_U_topk_IJs_tensor(j_topk_UIs)
+        # u_IJS_path = dataconf["new_datapath"] + dataconf['u_topk_IJs'] 
+        # i_UJS_path = dataconf["new_datapath"] + dataconf['i_topk_UJs']
+        # j_UIS_path = dataconf["new_datapath"] + dataconf['j_topk_UIs']
+        
+        # u_topk_IJs = json.load(open(u_IJS_path)) 
+        # i_topk_UJs = json.load(open(i_UJS_path)) 
+        # j_topk_UIs = json.load(open(j_UIS_path))
+        # self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
+        # self.i_topk_UJs = get_U_topk_IJs_tensor(i_topk_UJs)
+        # self.j_topk_UIs = get_U_topk_IJs_tensor(j_topk_UIs)
         
         self.visual_features = torch.cat((visual_features, torch.zeros(1, 2048)),0)
         self.train_items, self.train_users = self.get_train_user_items(train_data)

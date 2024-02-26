@@ -20,14 +20,15 @@ save_results: 1  #save prediction results in evaluation if 1
 save_model: 1  #save the model if 1
 data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
-use_topk_ij_for_u: 0
+use_topk_ij_for_u: 1
 use_hard_neg: 0
 context: 1 #considering context-enhanced module if 1
 use_pretrain: 1 # considering pretrained model if 1
 use_Nor: 1  #considering normalization if 1
-top_k_u: 5  # topk similar users
-top_k_i: 5  # topk similar items
-path: 0  #considering path-enhanced module if 1
+top_k_u: 2  # topk similar users
+top_k_i: 2  # topk similar items
+path: 1  #considering path-enhanced module if 1
+path_enhance: 1
 use_selfatt: 0 # considering self attention if 1
 pretrain_layer_num: 3  
 neighbor_samples: 4  #number of neighbors to consider in the context-enhanced module
@@ -35,8 +36,8 @@ context_hops: 3 #2 for iqon 3 for else  #number of hops to consider in the conte
 neighbor_agg: "mean"
 score_type: "transE"
 agg_param: 0.2 #0.05 for iqon 0.2 for else  #weight of neighbour information to be propagated to the centered node
-max_path_len: 4  #maximum length of paths to consider
-path_num: 4  #number of considered qualified paths(randomly sample)
+max_path_len: 2 #4  #maximum length of paths to consider
+path_num: 2 #4  #number of considered qualified paths(randomly sample)
 path_weight: 1  #weight of path-based transition modeling
-path_agg: "mean"
-pretrain_mode: True 
+path_agg: "sum" # "mean"
+pretrain_mode: False 
