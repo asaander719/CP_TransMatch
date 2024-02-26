@@ -333,7 +333,7 @@ class Dataset():
                 if os.path.exists(fake_triplets_path):
                     self.unique_fake_triplets = load_csv_data(fake_triplets_path)
                 else:
-                    unique_fake_triplets = get_fake_triplets(path, conf['top_k_u'], conf['top_k_i'], u_topk_IJs, i_topk_UJs, j_topk_UIs)
+                    unique_fake_triplets = get_fake_triplets(fake_triplets_path, conf['top_k_u'], conf['top_k_i'], u_topk_IJs, i_topk_UJs, j_topk_UIs)
                     self.unique_fake_triplets = load_csv_data(fake_triplets_path)
                 entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set = build_kg_topk(self.unique_fake_triplets) 
             else:

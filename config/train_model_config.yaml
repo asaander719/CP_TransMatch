@@ -22,7 +22,7 @@ data_status: "use_old" #use_old, prepare_save, prepare_not_save
 
 use_topk_ij_for_u: 1
 use_hard_neg: 0
-context: 1 #considering context-enhanced module if 1
+context: 0 #considering context-enhanced module if 1
 use_pretrain: 1 # considering pretrained model if 1
 use_Nor: 1  #considering normalization if 1
 top_k_u: 2  # topk similar users
@@ -31,8 +31,8 @@ path: 1  #considering path-enhanced module if 1
 path_enhance: 1
 use_selfatt: 0 # considering self attention if 1
 pretrain_layer_num: 3  
-neighbor_samples: 4  #number of neighbors to consider in the context-enhanced module
-context_hops: 3 #2 for iqon 3 for else  #number of hops to consider in the context-enhanced module
+neighbor_samples: 2 #4  #number of neighbors to consider in the context-enhanced module
+context_hops: 2 #3 #2 for iqon 3 for else  #number of hops to consider in the context-enhanced module
 neighbor_agg: "mean"
 score_type: "transE"
 agg_param: 0.2 #0.05 for iqon 0.2 for else  #weight of neighbour information to be propagated to the centered node
