@@ -311,16 +311,16 @@ class Dataset():
                 np.save(dataconf["new_datapath"] + "/test_data_%d.npy"%(conf["neg_num"]), test_data_L)
                 np.save(dataconf["new_datapath"] + "/val_data_%d.npy"%(conf["neg_num"]), val_data_L)
 
-        # u_IJS_path = dataconf["new_datapath"] + dataconf['u_topk_IJs'] 
-        # i_UJS_path = dataconf["new_datapath"] + dataconf['i_topk_UJs']
-        # j_UIS_path = dataconf["new_datapath"] + dataconf['j_topk_UIs']
+        u_IJS_path = dataconf["new_datapath"] + dataconf['u_topk_IJs'] 
+        i_UJS_path = dataconf["new_datapath"] + dataconf['i_topk_UJs']
+        j_UIS_path = dataconf["new_datapath"] + dataconf['j_topk_UIs']
         
-        # u_topk_IJs = json.load(open(u_IJS_path)) 
-        # i_topk_UJs = json.load(open(i_UJS_path)) 
-        # j_topk_UIs = json.load(open(j_UIS_path))
-        # self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
-        # self.i_topk_UJs = get_U_topk_IJs_tensor(i_topk_UJs)
-        # self.j_topk_UIs = get_U_topk_IJs_tensor(j_topk_UIs)
+        u_topk_IJs = json.load(open(u_IJS_path)) 
+        i_topk_UJs = json.load(open(i_UJS_path)) 
+        j_topk_UIs = json.load(open(j_UIS_path))
+        self.u_topk_IJs = get_U_topk_IJs_tensor(u_topk_IJs)
+        self.i_topk_UJs = get_U_topk_IJs_tensor(i_topk_UJs)
+        self.j_topk_UIs = get_U_topk_IJs_tensor(j_topk_UIs)
         
         self.visual_features = torch.cat((visual_features, torch.zeros(1, 2048)),0)
         self.train_items, self.train_users = self.get_train_user_items(train_data)
@@ -328,7 +328,16 @@ class Dataset():
         self.new_users = set(set(self.user_map.values()) - self.train_users)  
         
         if conf["model"] == "TransMatch":
-            entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set = build_kg(train_data)
+            if conf['path_enhance']:
+                fake_triplets_path = dataconf['new_datapath'] + "fake_triplets_U%d_I%d.csv"%(conf['top_k_u'], conf['top_k_i'])
+                if os.path.exists(fake_triplets_path):
+                    self.unique_fake_triplets = load_csv_data(fake_triplets_path)
+                else:
+                    unique_fake_triplets = get_fake_triplets(path, conf['top_k_u'], conf['top_k_i'], u_topk_IJs, i_topk_UJs, j_topk_UIs)
+                    self.unique_fake_triplets = load_csv_data(fake_triplets_path)
+                entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set = build_kg_topk(self.unique_fake_triplets) 
+            else:
+                entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set = build_kg(train_data)
             self.null_entity = len(self.item_map)
             self.null_relation = len(self.user_map)
             self.null_edge = len(edge2entities)
@@ -355,12 +364,19 @@ class Dataset():
             self.neighbor_params = [np.array(entity2edges), np.array(edge2entities), np.array(edge2relation), np.array(relation2entities), entity2edge_set, relation2entity_set]  
             
             if conf["path"]:
-                # if applying pathcon_path or path_contrastive, all conditional paths in the kg should be obtained first.  
-                ht_dict_path = dataconf["new_datapath"] + "/ht_dict_%d_%d.json"%(conf["path_num"], conf["max_path_len"])
-                path_tensor_path = dataconf["new_datapath"] + "/path_%d_%d_all"%(conf["path_num"], conf["max_path_len"])
+                # if applying pathcon_path or path_contrastive, all conditional paths in the kg should be obtained first. 
+                if conf['path_enhance']:    
+                    ht_dict_path = dataconf["new_datapath"] + "/ht_dict_topk_U%d_I%d_%d_%d.json"%(conf['top_k_u'], conf['top_k_i'],conf["path_num"], conf["max_path_len"])
+                    path_tensor_path = dataconf["new_datapath"] + "/path_topk_U%d_I%d_%d_%d_all"%(conf['top_k_u'], conf['top_k_i'],conf["path_num"], conf["max_path_len"]) 
+                else:
+                    ht_dict_path = dataconf["new_datapath"] + "/ht_dict_%d_%d.json"%(conf["path_num"], conf["max_path_len"])
+                    path_tensor_path = dataconf["new_datapath"] + "/path_%d_%d_all"%(conf["path_num"], conf["max_path_len"])
                 if not os.path.exists(ht_dict_path) or not os.path.exists(path_tensor_path):
                     print("generating shorter than %d paths ..."%conf["max_path_len"])
-                    head2tails = get_h2t(train_data, test_data, val_data)
+                    if conf['path_enhance']:
+                        head2tails = get_h2t_topk(self.unique_fake_triplets, test_data, val_data)
+                    else:
+                        head2tails = get_h2t(train_data, test_data, val_data)
                     head2tails_list = [(k, v) for k, v in head2tails.items()]
                     n_cores, pool, range_list = get_params_for_mp(len(head2tails_list))
                     results = pool.map(count_all_paths, zip([e2re] * n_cores, 

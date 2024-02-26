@@ -93,7 +93,7 @@ def get_h2t(train_triplets, test_triplets, val_triplets):
 #         head2tails[tail].add(head)
     return head2tails  
     
-def get_h2t(fake_triplets, test_triplets, val_triplets):
+def get_h2t_topk(fake_triplets, test_triplets, val_triplets):
     head2tails = defaultdict(set)
     for relation, head, tail in fake_triplets:
         head2tails[head].add(tail) 
