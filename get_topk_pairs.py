@@ -75,7 +75,7 @@ def _get_IJs_for_U_(conf, dataset, model, train_ij_pairs):
         distances_v = model.transE_predict(u_rep_v, I_visual, J_visual, J_bias_v)
         distances += distances_v
 
-        topk_scores, topk_indices = torch.topk(distances.view(-1), conf['top_k_u'], dim=-1)
+        topk_scores, topk_indices = torch.topk(distances.view(-1), k=5, dim=-1)
         topk_i_j_pairs = ij_pairs[topk_indices]
         new_u_ij_dict[int(user_idx)] = topk_i_j_pairs.cpu().numpy().tolist()
         
@@ -192,7 +192,7 @@ def _get_UIs_for_J_(conf, dataset, model, train_ui_pairs):
 def main():
     conf = yaml.safe_load(open("./config/train_model_config.yaml"))
     conf["dataset"] = "iqon_s"
-    conf["gpu"] = 0
+    conf["gpu"] = 1
     conf["device"] = torch.device("cuda:%s"%conf["gpu"] if torch.cuda.is_available() else "cpu")
     dataset = Dataset(conf)
     global logger
@@ -206,6 +206,9 @@ def main():
     pretrain_model_file = f"{conf['pretrained_model']}.pth.tar"
     pretrain_model_dir = "model/iqon_s/pretrained_model/"
     pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
+    conf['context_enhance'] = 0
+    conf['path_enhance'] = 0
+
     if os.path.exists(pretrain_model_path):
         logger.info("=> loading model ...")
         model = torch.load(pretrain_model_path)

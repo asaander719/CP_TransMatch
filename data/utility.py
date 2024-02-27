@@ -13,6 +13,7 @@ import torchvision.models as models
 from util.kg_utils import *
 from trainer.dataloader import *
 import scipy.sparse as sp
+import pandas as pd
 
 def load_csv_data(train_data_path):
     result = []
@@ -179,10 +180,10 @@ def get_U_topk_IJs_tensor(u_topk_IJs):
 
 def get_fake_triplets(path, topk_u, topk_i, u_ijs, i_ujs, j_uis):
     fake_triplets = []
-    for key, values in u_ijs.items():
+    for key, value in u_ijs.items():
         for i in range(topk_u):     
-            triplet = [int(key)] + [value[i] for value in values]  # u, i, j
-            fake_triplets.append(tuple(triplet))
+            triplet = tuple([int(key), value[0][i], value[1][i]])   # u, i, j
+            fake_triplets.append(triplet)
 
     # for key, value in i_ujs.items():
     #     for i in range(topk_i):
@@ -195,14 +196,19 @@ def get_fake_triplets(path, topk_u, topk_i, u_ijs, i_ujs, j_uis):
     #         fake_triplets.append(triplet)
 
     # Remove duplicates
-    unique_fake_triplets = []
+    # unique_fake_triplets = []
+    train_df = pd.read_csv("data/iqon_s/train.csv", header=None).astype('int')
+    train_df.columns=["user_idx", "top_idx", "pos_bottom_idx", "neg_bottom_idx"]
+
+    unique_fake_triplets = train_df[['user_idx', 'top_idx', 'pos_bottom_idx']].drop_duplicates().values.tolist()
+    for triplet in fake_triplets:
+        if triplet not in unique_fake_triplets:
+            unique_fake_triplets.append(triplet)
     with open(path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
+        for triplet in unique_fake_triplets:
+            csv_writer.writerow(triplet)
 
-        for triplet in fake_triplets:
-            if triplet not in unique_fake_triplets:
-                unique_fake_triplets.append(triplet)
-                csv_writer.writerow(triplet)
     return unique_fake_triplets
 
 def prepare_data(conf):
@@ -403,7 +409,8 @@ class Dataset():
                             try:
                                 pick_paths = np.random.choice(paths,conf["path_num"])
                             except Exception:
-                                pdb.set_trace()
+                                continue
+                                # pdb.set_trace()
                             new_paths = []
                             for path in pick_paths:
                                 path = list(path)

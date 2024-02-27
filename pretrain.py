@@ -1,5 +1,4 @@
 # coding=utf-8
-
 import torch
 from torch.optim import Adam
 import numpy as np
@@ -7,12 +6,10 @@ from datetime import datetime
 import argparse
 import logging
 import argparse
-
 import pdb
 import shutil
 import os
 import yaml
-
 from data.utility import Dataset
 from trainer.TransMatch_pretrain import TransMatch
 from trainer.TransE import TransE
@@ -78,7 +75,7 @@ def Train_Eval(conf):
             j_topk_UIs = dataset.j_topk_UIs.to(conf["device"])
             model = TransMatch(conf, u_topk_IJs, i_topk_UJs, j_topk_UIs, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
-    # logger.info(model)
+    logger.info(model)
     # logger.info(conf)
     
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
@@ -166,9 +163,7 @@ def Train_Eval(conf):
         early_stopping(auc)
         if early_stopping.early_stop:
             print("Early stopping")
-            break 
-       
-        
+            break    
                           
 def get_save_file(conf, settings):
     if conf["model"] == "TransMatch":      
@@ -198,7 +193,6 @@ def get_save_file(conf, settings):
         f_list[setting] = output_file
     return f_list, result_path, model_path
         
-
 def get_cmd(): 
     parser = argparse.ArgumentParser()
     # general params
@@ -206,8 +200,6 @@ def get_cmd():
     parser.add_argument("-g", "--gpu", default="0", type=str, help="assign cuda device")    
     args = parser.parse_args()
     return args
-
-
 
 if __name__ == "__main__": 
     paras = get_cmd().__dict__
@@ -228,48 +220,14 @@ if __name__ == "__main__":
     pretrain_model_dir = "model/iqon_s/pretrained_model/"
     pretrain_model_path = os.path.join(pretrain_model_dir, pretrain_model_file)
 
-
-
     if os.path.exists(pretrain_model_path):
-        # conf['pretrain_mode'] = False
-        # conf['use_Nor'] = 1
-        # conf['top_k_i'] = 3
-        # conf['top_k_u'] = 3
-        # conf['use_hard_neg'] = 0
-        # conf['context'] = 0
-        # conf["use_topk_ij_for_u"] = 1
-        # conf['use_selfatt'] = 0
         conf['batch_size'] = 1024
         conf['test_batch_size'] = 1024
         print('use_path:', conf['path'],  'top_k_u:', conf['top_k_u'], 'context:', 
-                                    conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
-                                    "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
+                                    conf['context'], 'path_enhance:', conf['path_enhance'], 'use_Nor:', conf['use_Nor'],
+                                    "context_enhance:", conf["context_enhance"], 'top_k_i:', conf['top_k_i'])
         Train_Eval(conf)
-        # for N in [1, 0]:
-        #     conf['use_Nor'] = N
-        #     for s in [1, 0]: 
-        #         conf['use_selfatt'] = s
-        #         for k in [3, 5, 1]:
-        #             conf['top_k_i'] = k
-        #             conf['top_k_u'] = k
-        #             for h in [0, 1]:
-        #                 conf['use_hard_neg'] = h
-        #                 if h == 0:
-        #                     conf['batch_size'] = 1024
-        #                     conf['test_batch_size'] =1024
-        #                 else: 
-        #                     conf['batch_size'] = 256
-        #                     conf['test_batch_size'] = 256
-
-        #                 for c in [1, 0]:
-        #                     conf['context'] = c #considering context-enhanced module if 1
-                        
-        #                     for t in [0]:
-        #                         conf["use_topk_ij_for_u"] = t
-        #                         print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
-        #                             conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
-        #                             "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
-        #                         Train_Eval(conf)
+       
     else:
         conf['pretrain_mode'] = True
         print('<<<<<<<< Start Pre-training >>>>>>>>')
@@ -277,35 +235,7 @@ if __name__ == "__main__":
         print('<<<<<<<< Pre-training End >>>>>>>>')
         conf['pretrain_mode'] = False
         print('use_path:', conf['path'],  'top_k_u:', conf['top_k_u'], 'context:', 
-                                    conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
-                                    "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
+                                    conf['context'], 'path_enhance:', conf['path_enhance'], 'use_Nor:', conf['use_Nor'],
+                                    "context_enhance:", conf["context_enhance"], 'top_k_i:', conf['top_k_i'])
         Train_Eval(conf)
-
-        # for N in [1, 0]:
-        #     conf['use_Nor'] = N
-        #     for s in [1, 0]: 
-        #         conf['use_selfatt'] = s
-        #         for k in [3, 5, 1]:
-        #             conf['top_k_i'] = k
-        #             conf['top_k_u'] = k
-        #             for h in [1, 0]:
-        #                 conf['use_hard_neg'] = h
-        #                 if h == 0:
-        #                     conf['batch_size'] = 1024
-        #                     conf['test_batch_size'] =1024
-        #                 else: 
-        #                     conf['batch_size'] = 256
-        #                     conf['test_batch_size'] = 256
-
-        #                 for c in [1, 0]:
-        #                     conf['context'] = c #considering context-enhanced module if 1
-                        
-        #                     for t in [1, 0]:
-        #                         conf["use_topk_ij_for_u"] = t
-        #                         print('use_selfatt:', conf['use_selfatt'],  'top_k_u:', conf['top_k_u'], 'context:', 
-        #                             conf['context'], 'use_hard_neg:', conf['use_hard_neg'], 'use_Nor:', conf['use_Nor'],
-        #                             "use_topk_ij_for_u:", conf["use_topk_ij_for_u"])
-        #                         Train_Eval(conf)
-
-
-                               
+    

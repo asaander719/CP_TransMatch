@@ -98,7 +98,6 @@ class Attention(nn.Module):
         self.query = nn.Linear(embedding_dim, embedding_dim)
         self.key = nn.Linear(embedding_dim, embedding_dim)
         self.value = nn.Linear(embedding_dim, embedding_dim)
-
         # self.attn_dropout = nn.Dropout(p=attn_dropout_prob)
         # # self.out_dropout = nn.Dropout(p=hidden_dropout_prob)
         # self.LayerNorm = nn.LayerNorm(embedding_dim)
@@ -132,8 +131,7 @@ class TransMatch(Module):
         self.use_Nor = conf['use_Nor']
         self.top_k_i = conf['top_k_i']
         self.use_hard_neg = conf['use_hard_neg']
-        self.use_topk_ij_for_u = conf['use_topk_ij_for_u']
-
+        self.context_enhance = conf['context_enhance']
         self.neighbor_params = neighbor_params
         self.entity2edges = torch.LongTensor(self.neighbor_params[0]).to(self.device)
         self.edge2entities = torch.LongTensor(self.neighbor_params[1]).to(self.device)
@@ -143,8 +141,7 @@ class TransMatch(Module):
         self.relation2entity_set = self.neighbor_params[5]
         self.u_topk_IJs = u_topk_IJs.to(self.device)
         self.i_topk_UJs = i_topk_UJs.to(self.device)
-        self.j_topk_UIs = j_topk_UIs.to(self.device)
-            
+        self.j_topk_UIs = j_topk_UIs.to(self.device)           
         self.pretrain_mode = conf["pretrain_mode"]
         self.pretrain_layer_num = conf['pretrain_layer_num']
 
@@ -401,17 +398,17 @@ class TransMatch(Module):
             R_j, R_k = self.transe.forward(batch)
               
         else:
-            # if self.use_pretrain:
             U_latent_ori = self.transe.u_embeddings_l(Us) 
             I_latent_ori  = self.transe.i_embeddings_i(Is)
             J_latent_ori  = self.transe.i_embeddings_i(Js)
             K_latent_ori  = self.transe.i_embeddings_i(Ks)
 
-            if self.use_topk_ij_for_u:
+            if self.context_enhance:
                 U_latent = self._group_topkIJs_for_U_(self.transe.i_embeddings_i, Us, U_latent_ori, self.self_attention_u)
                 I_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Is, I_latent_ori, self.self_attention_u)
                 J_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Js, J_latent_ori, self.self_attention_u)
-                K_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Ks, K_latent_ori, self.self_attention_u)
+                # K_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Ks, K_latent_ori, self.self_attention_u)
+                K_latent = K_latent_ori
                 if self.use_Nor:
                     U_latent = F.normalize(U_latent,dim=0)
                     I_latent = F.normalize(I_latent,dim=0)
@@ -435,7 +432,7 @@ class TransMatch(Module):
             #         K_latent = F.normalize(K_latent,dim=0)
             #     else:
             #         U_latent, I_latent, J_latent, K_latent =  U_latent, I_latent, J_latent, K_latent 
-            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # elif not self.context_enhance and not self.use_selfatt:
             else:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
@@ -472,12 +469,13 @@ class TransMatch(Module):
             J_visual_ori = self.transe.visual_nn_comp(vis_J_ori)
             K_visual_ori = self.transe.visual_nn_comp(vis_K_ori)
 
-            if self.use_topk_ij_for_u:
+            if self.context_enhance:
                 all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
                 U_visual = self._group_topkIJs_for_U_v_(all_item_latent_v, Us, U_visual_ori, self.self_attention_v_u)
                 I_visual = self._group_topkUJs_for_I_v_(all_item_latent_v, Is, I_visual_ori, self.self_attention_v_u)
                 J_visual = self._group_topkUJs_for_I_v_(all_item_latent_v, Js, J_visual_ori, self.self_attention_v_u) 
-                K_visual = self._group_topkUJs_for_I_v_(all_item_latent_v, Ks, K_visual_ori, self.self_attention_v_u)
+                # K_visual = self._group_topkUJs_for_I_v_(all_item_latent_v, Ks, K_visual_ori, self.self_attention_v_u)
+                K_visual = K_visual_ori
                 if self.use_Nor:
                     U_visual = F.normalize(U_visual,dim=0)
                     I_visual = F.normalize(I_visual,dim=0)
@@ -501,7 +499,7 @@ class TransMatch(Module):
             #         K_visual = F.normalize(K_visual,dim=0)
             #     else:
             #         U_visual, I_visual, J_visual, K_visual = U_visual, I_visual, J_visual, K_visual
-            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # elif not self.context_enhance and not self.use_selfatt:
             else:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
                     
@@ -680,7 +678,8 @@ class TransMatch(Module):
         topk_Js_embeddings = item_embeddings(topk_Js) #bs, top_k_u, hd
         combined_tensor = torch.cat((topk_Is_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
         # aggregated_embeddings = att_model_u(batch_user_embeddings, combined_tensor)
-        aggregated_embeddings = self._mean_emb_(batch_user_embeddings, combined_tensor)
+        # aggregated_embeddings = self._mean_emb_(batch_user_embeddings, combined_tensor)
+        aggregated_embeddings = batch_user_embeddings + torch.mean(combined_tensor, dim=1) * self.agg_param
         return aggregated_embeddings
 
     def _group_topkIJs_for_U_v_(self, item_embeddings, Us, batch_user_embeddings, att_model_u):
@@ -692,7 +691,8 @@ class TransMatch(Module):
         topk_Js_embeddings = item_embeddings[topk_Js] #bs, top_k_u, hd
         combined_tensor = torch.cat((topk_Is_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
         # aggregated_embeddings = att_model_u(batch_user_embeddings, combined_tensor)
-        aggregated_embeddings = self._mean_emb_(batch_user_embeddings, combined_tensor)
+        # aggregated_embeddings = self._mean_emb_(batch_user_embeddings, combined_tensor)
+        aggregated_embeddings = batch_user_embeddings + torch.mean(combined_tensor, dim=1) * self.agg_param
         return aggregated_embeddings
 
     def _group_topkUJs_for_I_(self, item_embeddings, Is, batch_Is_embeddings, att_model_u):
@@ -703,7 +703,8 @@ class TransMatch(Module):
         topk_Js_embeddings = item_embeddings(topk_Js) #bs, top_k_u, hd
         combined_tensor = torch.cat((topk_Us_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
         # aggregated_embeddings = att_model_u(batch_Is_embeddings, combined_tensor)
-        aggregated_embeddings = self._mean_emb_(batch_Is_embeddings, combined_tensor)
+        # aggregated_embeddings = self._mean_emb_(batch_Is_embeddings, combined_tensor)
+        aggregated_embeddings = batch_Is_embeddings + torch.mean(combined_tensor, dim=1) * self.agg_param
         return aggregated_embeddings
 
     def _group_topkUJs_for_I_v_(self, item_embeddings, Is, batch_Is_embeddings, att_model_u):
@@ -714,7 +715,8 @@ class TransMatch(Module):
         topk_Js_embeddings = item_embeddings[topk_Js] #bs, top_k_u, hd
         combined_tensor = torch.cat((topk_Us_embeddings, topk_Js_embeddings), dim=1) #bs, top_k_u*2, hd
         # aggregated_embeddings = att_model_u(batch_Is_embeddings, combined_tensor)
-        aggregated_embeddings = self._mean_emb_(batch_Is_embeddings, combined_tensor)
+        # aggregated_embeddings = self._mean_emb_(batch_Is_embeddings, combined_tensor)
+        aggregated_embeddings = batch_Is_embeddings + torch.mean(combined_tensor, dim=1) * self.agg_param
         return aggregated_embeddings
 
     def inference(self, batch):
@@ -739,7 +741,7 @@ class TransMatch(Module):
             J_latent_ori = self.transe.i_embeddings_i(Js)
             K_latent_ori = self.transe.i_embeddings_i(Ks.squeeze(1))
 
-            if self.use_topk_ij_for_u:
+            if self.context_enhance:
                 U_latent = self._group_topkIJs_for_U_(self.transe.i_embeddings_i, Us, U_latent_ori, self.self_attention_u)
                 I_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Is, I_latent_ori, self.self_attention_u)
                 J_latent = self._group_topkUJs_for_I_(self.transe.i_embeddings_i, Js, J_latent_ori, self.self_attention_u)
@@ -765,7 +767,7 @@ class TransMatch(Module):
             #         I_latent = F.normalize(I_latent,dim=0)
             #         J_latent = F.normalize(J_latent,dim=0)
             #         K_latent = F.normalize(K_latent,dim=0)
-            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # elif not self.context_enhance and not self.use_selfatt:
             else:
                 U_latent, I_latent, J_latent, K_latent = U_latent_ori, I_latent_ori, J_latent_ori, K_latent_ori
 
@@ -796,7 +798,7 @@ class TransMatch(Module):
             J_visual_ori = self.transe.visual_nn_comp(vis_J)
             K_visual_ori = self.transe.visual_nn_comp(vis_K)
 
-            if self.use_topk_ij_for_u:
+            if self.context_enhance:
                 all_item_latent_v = self.transe.visual_nn_comp(self.visual_features)
                 U_visual = self._group_topkIJs_for_U_v_(all_item_latent_v, Us, U_visual_ori, self.self_attention_v_u)
                 I_visual = self._group_topkUJs_for_I_v_(all_item_latent_v, Is, I_visual_ori, self.self_attention_v_u)
@@ -823,7 +825,7 @@ class TransMatch(Module):
             #         I_visual = F.normalize(I_visual,dim=0)
             #         J_visual = F.normalize(J_visual,dim=0)
             #         K_visual = F.normalize(K_visual,dim=0)
-            # elif not self.use_topk_ij_for_u and not self.use_selfatt:
+            # elif not self.context_enhance and not self.use_selfatt:
             else:
                 U_visual, I_visual, J_visual, K_visual = U_visual_ori, I_visual_ori, J_visual_ori, K_visual_ori
 
