@@ -335,11 +335,11 @@ class Dataset():
         
         if conf["model"] == "TransMatch":
             if conf['path_enhance']:
-                fake_triplets_path = dataconf['new_datapath'] + "fake_triplets_U%d_I%d.csv"%(conf['top_k_u'], conf['top_k_i'])
+                fake_triplets_path = dataconf['new_datapath'] + "fake_triplets_U%d_I%d.csv"%(conf['topk_u'], conf['topk_i'])
                 if os.path.exists(fake_triplets_path):
                     self.unique_fake_triplets = load_csv_data(fake_triplets_path)
                 else:
-                    unique_fake_triplets = get_fake_triplets(fake_triplets_path, conf['top_k_u'], conf['top_k_i'], u_topk_IJs, i_topk_UJs, j_topk_UIs)
+                    unique_fake_triplets = get_fake_triplets(fake_triplets_path, conf['topk_u'], conf['topk_i'], u_topk_IJs, i_topk_UJs, j_topk_UIs)
                     self.unique_fake_triplets = load_csv_data(fake_triplets_path)
                 entity2edge_set, edge2entities, edge2relation, e2re, relation2entity_set = build_kg_topk(self.unique_fake_triplets) 
             else:
@@ -372,8 +372,8 @@ class Dataset():
             if conf["path"]:
                 # if applying pathcon_path or path_contrastive, all conditional paths in the kg should be obtained first. 
                 if conf['path_enhance']:    
-                    ht_dict_path = dataconf["new_datapath"] + "/ht_dict_topk_U%d_I%d_%d_%d.json"%(conf['top_k_u'], conf['top_k_i'],conf["path_num"], conf["max_path_len"])
-                    path_tensor_path = dataconf["new_datapath"] + "/path_topk_U%d_I%d_%d_%d_all"%(conf['top_k_u'], conf['top_k_i'],conf["path_num"], conf["max_path_len"]) 
+                    ht_dict_path = dataconf["new_datapath"] + "/ht_dict_topk_U%d_I%d_%d_%d.json"%(conf['topk_u'], conf['topk_i'],conf["path_num"], conf["max_path_len"])
+                    path_tensor_path = dataconf["new_datapath"] + "/path_topk_U%d_I%d_%d_%d_all"%(conf['topk_u'], conf['topk_i'],conf["path_num"], conf["max_path_len"]) 
                 else:
                     ht_dict_path = dataconf["new_datapath"] + "/ht_dict_%d_%d.json"%(conf["path_num"], conf["max_path_len"])
                     path_tensor_path = dataconf["new_datapath"] + "/path_%d_%d_all"%(conf["path_num"], conf["max_path_len"])

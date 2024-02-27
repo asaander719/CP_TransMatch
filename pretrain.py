@@ -75,7 +75,7 @@ def Train_Eval(conf):
             j_topk_UIs = dataset.j_topk_UIs.to(conf["device"])
             model = TransMatch(conf, u_topk_IJs, i_topk_UJs, j_topk_UIs, dataset.neighbor_params, dataset.visual_features.to(conf["device"]))
     model.to(conf["device"])
-    logger.info(model)
+    # logger.info(model)
     # logger.info(conf)
     
     early_stopping = EarlyStopping(pretrain_mode = conf['pretrain_mode'], patience=conf["patience"], verbose=True)
@@ -223,9 +223,9 @@ if __name__ == "__main__":
     if os.path.exists(pretrain_model_path):
         conf['batch_size'] = 1024
         conf['test_batch_size'] = 1024
-        print('use_path:', conf['path'],  'top_k_u:', conf['top_k_u'], 'context:', 
+        print('use_path:', conf['path'],  'topk_u:', conf['topk_u'], 'context:', 
                                     conf['context'], 'path_enhance:', conf['path_enhance'], 'use_Nor:', conf['use_Nor'],
-                                    "context_enhance:", conf["context_enhance"], 'top_k_i:', conf['top_k_i'])
+                                    "context_enhance:", conf["context_enhance"], 'topk_i:', conf['topk_i'])
         Train_Eval(conf)
        
     else:
@@ -234,8 +234,8 @@ if __name__ == "__main__":
         Train_Eval(conf)
         print('<<<<<<<< Pre-training End >>>>>>>>')
         conf['pretrain_mode'] = False
-        print('use_path:', conf['path'],  'top_k_u:', conf['top_k_u'], 'context:', 
+        print('use_path:', conf['path'],  'topk_u:', conf['topk_u'], 'context:', 
                                     conf['context'], 'path_enhance:', conf['path_enhance'], 'use_Nor:', conf['use_Nor'],
-                                    "context_enhance:", conf["context_enhance"], 'top_k_i:', conf['top_k_i'])
+                                    "context_enhance:", conf["context_enhance"], 'topk_i:', conf['topk_i'])
         Train_Eval(conf)
     
